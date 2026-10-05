@@ -59,7 +59,11 @@ button{cursor:pointer}
 .drop input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
 .filelist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
 .filelist li{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px;min-width:0}
-.filelist li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.filelist li .fname{display:flex;flex-direction:column;gap:2px;min-width:0}
+.filelist li .fname b{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.filelist li.bad{border-color:var(--bad);background:var(--bad-bg)}
+.filelist .ok{color:var(--ok);font-weight:600}
+.drop{position:relative}
 .err{color:var(--bad)}
 .btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 12px;font-weight:500;font-size:14px}
 .btn:hover{border-color:var(--blue)}
@@ -175,22 +179,14 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
         <button class="btn" data-action="clearfiles">Clear all files</button>
       </div>
     </div>
-    <div id="exampleBanner" class="banner" hidden>You're looking at example data with made-up employees. Add your punch report to replace it.</div>
-    <div class="files">
-      <div class="drop" data-kind="punch" id="dropPunch">
-        <h3>1 · Punch report</h3>
-        <p class="muted" style="font-size:14px">The <span class="mono">Punch_Report</span> export: one row per punch with date, in, out and dept code. CSV or Excel.</p>
-        <label class="btn primary pick" for="filePunch">Choose punch files</label>
-        <input type="file" id="filePunch" accept=".csv,.txt,.xlsx,.xls" multiple>
-        <ul class="filelist" id="listPunch"></ul>
-      </div>
-      <div class="drop" data-kind="schedule" id="dropSched">
-        <h3>2 · Schedule</h3>
-        <p class="muted" style="font-size:14px">Needed to catch lates, early outs and call-outs. Columns: Last Name, First Name, Date, Start, End, Shift. Put mandatory overtime in the End time.</p>
-        <label class="btn primary pick" for="fileSched">Choose schedule files</label>
-        <input type="file" id="fileSched" accept=".csv,.txt,.xlsx,.xls" multiple>
-        <ul class="filelist" id="listSched"></ul>
-      </div>
+    <div id="exampleBanner" class="banner" hidden>You're looking at example data with made-up employees. Add your timeclock files to replace it.</div>
+    <div class="drop" id="dropAll">
+      <h3>Add files</h3>
+      <p style="font-size:15px">Drag your timeclock exports here, or choose them from your computer. Add as many as you like at once. The page works out what each file is.</p>
+      <p class="muted" style="font-size:13px">Works with the Punch Report, the Timecard Report (by employee) and a schedule. CSV or Excel.</p>
+      <label class="btn primary pick" for="fileAll">Choose files</label>
+      <input type="file" id="fileAll" accept=".csv,.txt,.tsv,.xlsx,.xls" multiple>
+      <ul class="filelist" id="fileList"></ul>
     </div>
     <p class="privacy">Files are read inside this browser tab and are never uploaded. Close the tab and they're gone. Your rate settings and review decisions are remembered in this browser only.</p>
   </section>
@@ -289,92 +285,145 @@ const listDays = ds => ds.map(fmtDay).join(', ');
 function majority(arr){ const c={}; let best=null; for(const v of arr){ c[v]=(c[v]||0)+1; if(best==null || c[v]>c[best]) best=v; } return best; }
 
 function parseDate(s){
-  s = clean(s); let m;
-  if((m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/))){ let y=+m[3]; if(y<100) y+=2000; return Date.UTC(y,+m[1]-1,+m[2])/86400000; }
-  if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return Date.UTC(+m[1],+m[2]-1,+m[3])/86400000;
+  s = clean(s); let m;   // finds the date anywhere in the cell, e.g. "Sun 09/27/26" or "2026-09-27 00:00"
+  if((m = s.match(/(\d{4})-(\d{1,2})-(\d{1,2})/))) return Date.UTC(+m[1],+m[2]-1,+m[3])/86400000;
+  if((m = s.match(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/))){ let y=+m[3]; if(y<100) y+=2000; if(+m[1]<1||+m[1]>12||+m[2]<1||+m[2]>31) return null; return Date.UTC(y,+m[1]-1,+m[2])/86400000; }
   return null;
 }
 function parseTime(s){
-  s = clean(s).toUpperCase(); const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])?\.?M?\.?$/);
+  s = clean(s).toUpperCase().replace(/^\d{1,2}\/\d{1,2}\/\d{2,4}\s+|^\d{4}-\d{2}-\d{2}[ T]/, '');
+  let m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])?\.?M?\.?$/) || s.match(/^(\d{1,2})(\d{2})\s*([AP])\.?M?\.?$/);
   if(!m) return null; let h=+m[1]; const mi=+m[2];
-  if(m[3]){ h = h%12 + (m[3]==='P'?12:0); }
+  if(m[3]){ if(h<1 || h>12) return null; h = h%12 + (m[3]==='P'?12:0); }
   if(h>23 || mi>59) return null; return h*60+mi;
 }
-function parseCSV(text){
+function parseCSV(text, delim=','){
   const rows=[]; let row=[], f='', q=false;
   for(let i=0;i<text.length;i++){
     const c=text[i];
     if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
-    else if(c==='"') q=true;
-    else if(c===','){ row.push(f); f=''; }
+    else if(c==='"' && f.trim()==='') { q=true; f=''; }
+    else if(c===delim){ row.push(f); f=''; }
     else if(c==='\n' || c==='\r'){ if(c==='\r' && text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
     else f+=c;
   }
   if(f!=='' || row.length){ row.push(f); rows.push(row); }
   return rows;
 }
+function decodeText(buf){
+  const b = new Uint8Array(buf);
+  let enc = 'utf-8';
+  if(b[0]===0xFF && b[1]===0xFE) enc = 'utf-16le';
+  else if(b[0]===0xFE && b[1]===0xFF) enc = 'utf-16be';
+  else { let z=0; const n=Math.min(b.length,400); for(let i=1;i<n;i+=2) if(b[i]===0) z++; if(n>20 && z > n/5) enc = 'utf-16le'; }
+  let t = new TextDecoder(enc).decode(b);
+  if(enc==='utf-8' && t.includes('�')) t = new TextDecoder('windows-1252').decode(b);
+  return t.replace(/^﻿/, '');
+}
+function guessDelim(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim()).slice(0, 40);
+  let best=',', bestScore=-1;
+  for(const d of [',', '\t', ';', '|']){
+    const score = lines.reduce((a,l) => a + (l.replace(/"[^"]*"/g,'').split(d).length - 1), 0);
+    if(score>bestScore){ best=d; bestScore=score; }
+  }
+  return best;
+}
 
 /* ---------- file reading ---------- */
 function readRows(file){
   return new Promise((resolve, reject) => {
-    const r = new FileReader(); const isX = /\.xlsx?$/i.test(file.name);
-    r.onerror = () => reject(new Error("The file couldn't be read."));
+    const r = new FileReader(); const isX = /\.xls[xm]?$/i.test(file.name);
+    r.onerror = () => reject(new Error("This file couldn't be opened. Try saving it again and adding it once more."));
     r.onload = () => {
       try{
-        if(isX){
-          if(!window.XLSX) throw new Error('Excel support did not load. Save the file as CSV and try again.');
+        const b = new Uint8Array(r.result);
+        const looksZip = b[0]===0x50 && b[1]===0x4B, looksOle = b[0]===0xD0 && b[1]===0xCF;
+        if(isX || looksZip || looksOle){
+          if(!window.XLSX) throw new Error("Excel files can't be read right now. In Excel, use File › Save As › CSV, then add the CSV.");
           const wb = XLSX.read(r.result, {type:'array'});
-          resolve(parseCSV(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], {rawNumbers:false})));
-        } else resolve(parseCSV(String(r.result)));
+          resolve(wb.SheetNames.flatMap(n => parseCSV(XLSX.utils.sheet_to_csv(wb.Sheets[n], {rawNumbers:false}))));
+        } else { const t = decodeText(r.result); resolve(parseCSV(t, guessDelim(t))); }
       }catch(e){ reject(e); }
     };
-    isX ? r.readAsArrayBuffer(file) : r.readAsText(file);
+    r.readAsArrayBuffer(file);
   });
 }
 
-function interpret(rows, name){
-  let h=-1, up=null;
-  for(let i=0;i<Math.min(rows.length,25);i++){
-    const u = rows[i].map(c => clean(c).toUpperCase());
-    if(u.includes('DATE') && ((u.includes('IN') && u.includes('OUT')) || u.some(x=>/^START/.test(x)))){ h=i; up=u; break; }
-  }
-  if(h<0) throw new Error('No header row with DATE plus IN/OUT (punch report) or Start/End (schedule) was found.');
-  const find = re => up.findIndex(x => re.test(x));
-  const c = {
-    last: find(/^(EMP(LOYEE)?\s*)?L(AST)?\.?\s*NAME$/), first: find(/^(EMP(LOYEE)?\s*)?F(IRST)?\.?\s*NAME$/),
-    full: find(/^(EMPLOYEE\s*NAME|EMP\s*NAME|NAME|EMPLOYEE)$/), date: up.indexOf('DATE'),
-    in: up.indexOf('IN'), out: up.indexOf('OUT'), dept: find(/DEPT|DEPARTMENT/),
-    start: find(/^START/), end: find(/^(END|STOP)/), shift: find(/SHIFT/), role: find(/^(ROLE|POSITION|JOB)/)
-  };
-  if(c.last<0 && c.full<0) throw new Error('No employee name column was found.');
-  const kind = (c.in>=0 && c.out>=0) ? 'punch' : 'schedule';
-  if(kind==='schedule' && (c.start<0 || c.end<0)) throw new Error('A schedule needs Start and End columns.');
-  const recs = [];
-  for(const r of rows.slice(h+1)){
-    const day = parseDate(r[c.date]); if(day==null) continue;
+/* Column names the timeclock (and people) use, matched after uppercasing and squeezing out punctuation. */
+const COLS = {
+  last:  /^(EMP(LOYEE)? ?)?L(AST)? ?NAME$|^SURNAME$/,
+  first: /^(EMP(LOYEE)? ?)?F(IRST)? ?NAME$|^GIVEN NAME$/,
+  full:  /^(EMP(LOYEE)? ?)?(FULL ?)?NAME$|^EMPLOYEE$|^ASSOCIATE( NAME)?$|^WORKER( NAME)?$/,
+  date:  /^((PUNCH|WORK|SHIFT|SCHEDULE[D]?) ?)?DATE$|^DAY$|^DATE ?WORKED$/,
+  in:    /^(TIME ?IN|CLOCK ?IN|PUNCH ?IN|IN ?TIME|IN ?PUNCH|IN)$/,
+  out:   /^(TIME ?OUT|CLOCK ?OUT|PUNCH ?OUT|OUT ?TIME|OUT ?PUNCH|OUT)$/,
+  start: /^((SHIFT|SCHEDULED?) ?)?START( ?TIME)?$|^BEGIN$/,
+  end:   /^((SHIFT|SCHEDULED?) ?)?(END|STOP|FINISH)( ?TIME)?$/,
+  dept:  /DEPT|DEPARTMENT/,
+  shift: /^SHIFT( ?TYPE)?$/,
+  role:  /^(ROLE|POSITION|JOB|JOB ?TITLE)$/,
+  totals:/^(REG|REGULAR|TOTAL|TOTAL HOURS|OT1|OT|OVERTIME)$/
+};
+const normHead = s => clean(s).toUpperCase().replace(/[#_.\-:]/g,' ').replace(/\s+/g,' ').trim();
+function mapHeader(cells){
+  const up = cells.map(normHead), c = {};
+  for(const [k, re] of Object.entries(COLS)) c[k] = up.findIndex(x => x && re.test(x));
+  return c;
+}
+const isHeader = c => c.date>=0 && ((c.in>=0 && c.out>=0) || (c.start>=0 && c.end>=0));
+const TITLE_NAME = /^(?:time ?card(?: report)?|employee(?: name)?|name|associate)\s*[:\-–]\s*(.+)$/i;
+
+function interpret(rows){
+  const recs = []; let cols=null, kind=null, sectionName='', lastDay=null, lastDept='', sawSummary=false, sawHeader=false;
+  for(const r of rows){
+    const cells = r.map(clean);
+    if(!cells.some(Boolean)) continue;
+    // A title line like "Timecard Report : Carolina  Barajas Osuna" names the employee for the rows under it.
+    const t = cells.find(Boolean), tm = cells.filter(Boolean).length<=2 && t.match(TITLE_NAME);
+    if(tm && !/northern|department|all_/i.test(tm[1])){ sectionName = clean(tm[1]); lastDay=null; continue; }
+    const h = mapHeader(cells);
+    if(isHeader(h)){ cols=h; sawHeader=true; kind = (h.in>=0 && h.out>=0) ? 'punch' : 'schedule'; lastDay=null; continue; }
+    if(h.date<0 && h.totals>=0 && (h.last>=0 || h.full>=0)) { sawSummary = true; cols=null; continue; }
+    if(!cols) continue;
+
+    let day = parseDate(cells[cols.date]);
+    if(day==null){ if(cells[cols.date] && /\d/.test(cells[cols.date])) continue; day = lastDay; } // blank date = same day as row above
+    if(day==null) continue;
+    lastDay = day;
+
     let display, key;
-    if(c.last>=0){ const l=clean(r[c.last]), f=c.first>=0?clean(r[c.first]):''; if(!l && !f) continue; display = f ? `${l}, ${f}` : l; key = normKey(l+' '+f); }
-    else { display = clean(r[c.full]); if(!display) continue; key = normKey(display); }
+    if(cols.last>=0 && (cells[cols.last] || (cols.first>=0 && cells[cols.first]))){ const l=cells[cols.last], f=cols.first>=0?cells[cols.first]:''; display = f ? `${l}, ${f}` : l; key = normKey(l+' '+f); }
+    else if(cols.full>=0 && cells[cols.full]){ display = cells[cols.full]; key = normKey(display); }
+    else if(sectionName){ display = sectionName; key = normKey(sectionName); }
+    else continue;
+
     if(kind==='punch'){
-      const tin = parseTime(r[c.in]); if(tin==null) continue;
-      recs.push({kind, key, display, day, tin, tout:parseTime(r[c.out]), dept: c.dept>=0 ? clean(r[c.dept]).toUpperCase() : '', manual: r.some(x => /manual\s*edit/i.test(x))});
+      const tin = parseTime(cells[cols.in]); if(tin==null) continue;
+      let dept = cols.dept>=0 ? cells[cols.dept].toUpperCase() : '';
+      if(/^(LUNCH|BREAK|MEAL)$/.test(dept) || !dept) dept = lastDept; else lastDept = dept;
+      recs.push({kind, key, display, day, tin, tout:parseTime(cells[cols.out]), dept, manual: cells.some(x => /manual\s*edit/i.test(x))});
     } else {
-      const st = parseTime(r[c.start]), en = parseTime(r[c.end]); if(st==null || en==null) continue;
-      const sh = c.shift>=0 ? clean(r[c.shift]).toLowerCase() : '', ro = c.role>=0 ? clean(r[c.role]).toLowerCase() : '';
+      const st = parseTime(cells[cols.start]), en = parseTime(cells[cols.end]); if(st==null || en==null) continue;
+      const sh = cols.shift>=0 ? cells[cols.shift].toLowerCase() : '', ro = cols.role>=0 ? cells[cols.role].toLowerCase() : '';
       recs.push({kind, key, display, day, start:st, end:en,
         shift: /night/.test(sh)?'nights' : /weekend/.test(sh)?'weekend' : /week\s*day|day/.test(sh)?'weekday' : '',
         role: /driv/.test(ro)?'driver' : /ware|wh/.test(ro)?'warehouse' : ''});
     }
   }
-  if(!recs.length) throw new Error('The header was found, but no rows had a valid date and time.');
-  return {kind, recs};
+  if(recs.length) return {kind: recs.some(r => r.kind==='punch') ? 'punch' : 'schedule', recs};
+  if(sawSummary) throw new Error("This is the hours summary. It only has weekly totals, with no clock-in or clock-out times, so it can't show lates or missed shifts. In the timeclock, export the Punch Report (or the Timecard Report by employee) instead.");
+  if(sawHeader) throw new Error("The columns were found, but no rows had a date and a clock-in time. Check that the export covers the right dates.");
+  const peek = rows.find(r => r.filter(c => clean(c)).length >= 3);
+  throw new Error("This file doesn't have clock-in and clock-out times the page recognizes. Export the Punch Report from the timeclock and add that instead." +
+    (peek ? ` (Columns seen: ${peek.map(clean).filter(Boolean).slice(0,8).join(', ')})` : ''));
 }
 
-async function addFiles(fileList, slot){
+async function addFiles(fileList){
   if(state.example){ state.files = []; state.example = false; }
   for(const f of fileList){
-    const entry = {id: Math.random().toString(36).slice(2), name:f.name, kind:null, recs:[], error:null, slot};
-    try{ const res = interpret(await readRows(f), f.name); entry.kind=res.kind; entry.recs=res.recs; }
+    const entry = {id: Math.random().toString(36).slice(2), name:f.name, kind:null, recs:[], error:null};
+    try{ const res = interpret(await readRows(f)); entry.kind=res.kind; entry.recs=res.recs; }
     catch(e){ entry.error = e.message || String(e); }
     state.files.push(entry);
   }
@@ -612,9 +661,13 @@ function renderRates(){
   $('#ratesDriver').innerHTML = tr('driver'); $('#ratesWare').innerHTML = tr('warehouse');
 }
 function renderFiles(){
-  const li = f => `<li><span title="${esc(f.name)}">${esc(f.name)} ${f.error ? `<span class="err">— ${esc(f.error)}</span>` : `<span class="muted">· ${f.recs.length} rows</span>`}</span><button class="btn small" data-action="rmfile" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`;
-  $('#listPunch').innerHTML = state.files.filter(f => f.kind==='punch' || (f.error && f.slot==='punch')).map(li).join('');
-  $('#listSched').innerHTML = state.files.filter(f => f.kind==='schedule' || (f.error && f.slot!=='punch')).map(li).join('');
+  const what = f => {
+    const people = new Set(f.recs.map(r => r.key)).size, days = f.recs.map(r => r.day);
+    const range = days.length ? `${fmtDay(Math.min(...days))} – ${fmtDay(Math.max(...days))}` : '';
+    return `<span class="ok">✓ ${f.kind==='punch' ? 'Clock punches' : 'Schedule'}</span> <span class="muted">· ${people} ${people===1?'employee':'employees'} · ${range}</span>`;
+  };
+  const li = f => `<li class="${f.error?'bad':''}"><span class="fname"><b title="${esc(f.name)}">${esc(f.name)}</b>${f.error ? `<span class="err">${esc(f.error)}</span>` : what(f)}</span><button class="btn small" data-action="rmfile" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`;
+  $('#fileList').innerHTML = state.files.map(li).join('');
 }
 let settingsDrawn = false;
 function renderSettings(){
@@ -675,12 +728,11 @@ const TEMPLATE = 'Last Name,First Name,Date,Start,End,Shift\nReyes,Marco,09/28/2
 
 /* ---------- events ---------- */
 function wire(){
-  $('#filePunch').addEventListener('change', e => { addFiles([...e.target.files], 'punch'); e.target.value=''; });
-  $('#fileSched').addEventListener('change', e => { addFiles([...e.target.files], 'schedule'); e.target.value=''; });
-  for(const z of document.querySelectorAll('.drop')){
+  $('#fileAll').addEventListener('change', e => { addFiles([...e.target.files]); e.target.value=''; });
+  for(const z of [document.querySelector('#dropAll')]){
     z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
     z.addEventListener('dragleave', () => z.classList.remove('over'));
-    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('over'); if(e.dataTransfer.files.length) addFiles([...e.dataTransfer.files], z.dataset.kind); });
+    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('over'); if(e.dataTransfer.files.length) addFiles([...e.dataTransfer.files]); });
   }
   $('#weekSel').addEventListener('change', e => { state.week = +e.target.value; state.open.clear(); state.bulkConfirm=false; render(); });
   $('#search').addEventListener('input', e => { state.search = e.target.value; render(); });
