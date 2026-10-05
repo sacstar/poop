@@ -200,7 +200,7 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
       <li><h4>Add the punches from the timeclock (recommended)</h4>
         <p>Punches let the page check exact clock-in and clock-out times, down to the minute. In the timeclock website, run the <b>Punch Report</b> for the whole pay week, <b>Sunday through Saturday</b>. Save it as CSV or Excel. The <b>Timecard Report</b> for each employee also works. The hours summary (one line of totals per person) does <b>not</b> work, because it has no clock-in times.</p></li>
       <li><h4>Only for unusual weeks: a schedule</h4>
-        <p>Normally the tracker is enough. Crews are scheduled Days Mon–Thu 6:00 AM–4:30 PM, Nights Mon–Thu 4:00 PM–2:30 AM and Weekends Fri–Sun 6:00 AM–6:30 PM, plus any OT day in the tracker. If someone worked different hours, click <b>Get schedule template</b>, fill it in and add it. A schedule overrides the tracker for that person.</p></li>
+        <p>Normally the tracker is enough. Each person is scheduled on their crew's days (Days and Nights Mon–Thu, Weekends Fri–Sun) plus any OT day in the tracker. Their hours come from the hours column next to Shift (like "6am-4:30pm"), or the crew's standard hours if that's blank. If someone worked different hours, click <b>Get schedule template</b>, fill it in and add it. A schedule overrides the tracker for that person.</p></li>
       <li><h4>Drop the files in</h4>
         <p>Drag the files onto <b>Add files</b>, or click <b>Choose files</b>. You can add several at once. Each file gets a green ✓ with how many employees and which days it covers. A red box means the file couldn't be used, and it tells you why.</p></li>
       <li><h4>Pick the pay week</h4>
@@ -322,7 +322,7 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
         <div class="days7" id="setWeekend"></div>
       </fieldset>
       <fieldset><legend>Standard shifts (used with the attendance tracker)</legend><div id="shiftFields" style="display:flex;flex-direction:column;gap:10px"></div>
-        <p class="muted" style="font-size:12px">A crew is scheduled on its checked days. Any other day with a code in the tracker, such as OT, also counts as scheduled.</p>
+        <p class="muted" style="font-size:12px">Hours typed next to a person's Shift in the tracker (like "6am-4:30pm") are used instead of these. A crew is scheduled on its checked days. Any other day with a code in the tracker, such as OT, also counts as scheduled.</p>
       </fieldset>
       <fieldset><legend>Attendance tracker codes</legend><div id="codeFields" style="display:flex;flex-direction:column;gap:6px"></div></fieldset>
       <fieldset><legend>Departments</legend><div id="deptFields" style="display:flex;flex-direction:column;gap:8px"></div>
@@ -403,6 +403,14 @@ function parseTime(s){
   if(!m) return null; let h=+m[1]; const mi=+m[2];
   if(m[3]){ if(h<1 || h>12) return null; h = h%12 + (m[3]==='P'?12:0); }
   if(h>23 || mi>59) return null; return h*60+mi;
+}
+/* "6am-4:30pm", "4 PM - 2:30 AM", "06:00-16:30" → {start, end} in minutes */
+function parseRange(s){
+  const m = clean(s).toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?\s*(?:-|–|—|to)\s*(\d{1,2})(?::(\d{2}))?\s*([ap])?\.?m?\.?$/);
+  if(!m) return null;
+  const t = (h, mi, ap) => { h=+h; mi=+(mi||0); if(ap){ if(h<1||h>12) return null; h = h%12 + (ap==='p'?12:0); } return h<24 && mi<60 ? h*60+mi : null; };
+  const a = t(m[1],m[2],m[3]), b = t(m[4],m[5],m[6]);
+  return a==null || b==null || (!m[3] && !m[6] && !m[2] && !m[5]) ? null : {start:a, end:b};
 }
 function parseCSV(text, delim=','){
   const rows=[]; let row=[], f='', q=false;
@@ -506,7 +514,9 @@ function interpret(rows){
       const sh = tracker.shift>=0 ? cells[tracker.shift].toLowerCase() : '';
       const shift = /night/.test(sh) ? 'nights' : /weekend/.test(sh) ? 'weekend' : /day/.test(sh) ? 'weekday' : '';
       const active = tracker.status>=0 ? /^act/i.test(cells[tracker.status]) : true;
-      recs.push({kind:'roster', key, display, type, shift, active});
+      const dateIdx = new Set(tracker.dateCols.map(d => d.i));
+      let hours = null; for(let i=0;i<cells.length && !hours;i++) if(!dateIdx.has(i) && cells[i]) hours = parseRange(cells[i]);
+      recs.push({kind:'roster', key, display, type, shift, active, hours});
       for(const dc of tracker.dateCols){ const code = (cells[dc.i]||'').toUpperCase(); if(code) recs.push({kind:'tracker', key, display, day:dc.day, code, active}); }
       continue;
     }
@@ -614,7 +624,7 @@ function rebuild(){
         maxDay = maxDay==null ? r.day : Math.max(maxDay, r.day);
       } else if(r.kind==='roster'){
         const e = getEmp(r.key, r.display);
-        if(!e.tr || (r.active && !e.tr.active)) e.tr = {type:r.type, shift:r.shift, active:r.active};
+        if(!e.tr || (r.active && !e.tr.active)) e.tr = {type:r.type, shift:r.shift, active:r.active, hours:r.hours};
       } else if(r.kind==='tracker'){
         const e = getEmp(r.key, r.display);
         if(!e.codes.has(r.day) || r.active) e.codes.set(r.day, r.code);
@@ -680,7 +690,8 @@ function trackerSchedule(emp, ws){
     const code = emp.codes.get(d) || '', cat = code ? (S.codes[code] || 'review') : '';
     const base = !!def && def.days.includes(dow(d));
     if(cat==='off' || (!base && !code)) continue;   // day off, or not a crew day and nothing recorded
-    out.push({day:d, code, cat, base, start: def ? toMin(def.start) : null, end: def ? toMin(def.end) : null, shift: emp.tr?.shift || ''});
+    const h = emp.tr?.hours;   // the person's own hours from the tracker win over the crew's standard hours
+    out.push({day:d, code, cat, base, start: h ? h.start : def ? toMin(def.start) : null, end: h ? h.end : def ? toMin(def.end) : null, shift: emp.tr?.shift || ''});
   }
   return out;
 }
