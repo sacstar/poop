@@ -130,6 +130,26 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
 .days7{display:flex;flex-wrap:wrap;gap:6px}
 .days7 label{gap:4px}
 
+
+/* help guide */
+.help{gap:18px}
+.help .steps{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px 22px;counter-reset:step}
+.help .steps>li{counter-increment:step;display:grid;grid-template-columns:32px minmax(0,1fr);gap:4px 12px;align-content:start}
+.help .steps>li::before{content:counter(step);grid-row:span 2;width:32px;height:32px;border-radius:50%;background:var(--navy);color:var(--gold);font-family:var(--display);font-weight:800;display:grid;place-items:center}
+.help .steps h4{margin:4px 0 0;font-size:16px;font-family:var(--display);font-weight:800}
+.help .steps p,.help .steps ul{font-size:14px;margin:0}
+.help ul{padding-left:18px;margin:4px 0 0}
+.help li{margin-bottom:3px}
+.help .split{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.help .box{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--sunk);display:flex;flex-direction:column;gap:6px;min-width:0}
+.help h4.t{margin:0;font-size:15px;font-family:var(--display);font-weight:800}
+.help dl{margin:0;display:grid;grid-template-columns:max-content minmax(0,1fr);gap:6px 12px;font-size:14px;align-items:baseline}
+.help dt{white-space:nowrap}
+.help dd{margin:0}
+.help details.faq{border-top:1px solid var(--line);padding-top:8px}
+.help details.faq summary{cursor:pointer;font-weight:600;font-size:14px}
+.help details.faq p{font-size:14px;margin-top:4px;color:var(--muted)}
+
 /* gate */
 .gate{min-height:70vh;display:grid;place-items:center;padding-inline:16px}
 .gatecard{max-width:440px;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--navy);border-radius:10px;padding:24px;display:flex;flex-direction:column;gap:10px}
@@ -169,6 +189,70 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
       <p>Work every scheduled shift and all mandatory overtime in full. No lates, no early outs, no call-outs. Sent home for performance or conduct means no bonus. No exceptions.</p>
     </div>
   </section>
+
+
+  <details class="panel help" id="help" open>
+    <summary>How to use this page</summary>
+
+    <ol class="steps">
+      <li><h4>Export the punches from the timeclock</h4>
+        <p>In the timeclock website, run the <b>Punch Report</b> for the whole pay week, <b>Sunday through Saturday</b>. Save it as CSV or Excel. The <b>Timecard Report</b> for each employee also works. The hours summary (one line of totals per person) does <b>not</b> work, because it has no clock-in times.</p></li>
+      <li><h4>Add the schedule (recommended)</h4>
+        <p>The page can only catch lates, early outs and call-outs if it knows when people were supposed to work. Click <b>Get schedule template</b>, fill in one line per person per shift (Last Name, First Name, Date, Start, End, Shift) and save it as CSV. Put any <b>mandatory overtime</b> in the End time.</p></li>
+      <li><h4>Drop the files in</h4>
+        <p>Drag the files onto <b>Add files</b>, or click <b>Choose files</b>. You can add several at once. Each file gets a green ✓ with how many employees and which days it covers. A red box means the file couldn't be used, and it tells you why.</p></li>
+      <li><h4>Pick the pay week</h4>
+        <p>Choose the week next to <b>Pay week</b>. Weeks still in progress are marked "(in progress)". Don't pay out on those.</p></li>
+      <li><h4>Clear the "Needs review" list</h4>
+        <p>Click the yellow <b>Needs review</b> box to show only those people. Click a name to see their day-by-day punches and what needs checking. Then set <b>Decision this week</b> to Qualifies or Does not qualify and type the reason in the note box.</p></li>
+      <li><h4>Mark anyone sent home</h4>
+        <p>The timeclock can't tell if someone was sent home for performance or conduct. For anyone who was, open their name, set <b>Does not qualify</b> and note why, for example "Sent home for conduct 10/2".</p></li>
+      <li><h4>Send the results to payroll</h4>
+        <p>When nobody is left in Needs review, click <b>Download CSV</b> or <b>Copy for Excel</b> and paste it into a spreadsheet. The file lists every employee, their status, bonus amount and the reasons.</p></li>
+    </ol>
+
+    <div class="split">
+      <div class="box">
+        <h4 class="t">What the statuses mean</h4>
+        <dl>
+          <dt><span class="pill yes">Qualifies</span></dt><dd>Worked every scheduled shift in full. Gets the flyer amount for their role and shift.</dd>
+          <dt><span class="pill no">Does not qualify</span></dt><dd>Clocked in late, clocked out early, or missed a scheduled shift. The reason shows with the exact times.</dd>
+          <dt><span class="pill review">Needs review</span></dt><dd>The page can't decide on its own. You make the call (see below).</dd>
+          <dt><span class="pill na">Not eligible</span></dt><dd>Their department isn't covered by the flyer, such as staffing agency workers.</dd>
+        </dl>
+        <p class="muted" style="font-size:13px">A status with a dashed outline was set by hand.</p>
+      </div>
+      <div class="box">
+        <h4 class="t">Why someone needs review</h4>
+        <ul style="font-size:14px">
+          <li><b>No schedule uploaded</b>: without the schedule, lates and call-outs can't be checked. Add the schedule, or decide each person yourself.</li>
+          <li><b>Clock-in or clock-out entered by hand</b>: a manager typed the time in. Make sure it's the real time before approving.</li>
+          <li><b>No clock-out</b>: the person forgot to punch out, or is still at work.</li>
+          <li><b>Punch data ends before the week is over</b>: the export doesn't cover the whole week. Export again after Saturday.</li>
+          <li><b>Worked both day and night shifts</b>: pick the right bonus rate under <b>Bonus rate</b>.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="box">
+      <h4 class="t">Common questions</h4>
+      <details class="faq"><summary>A file shows a red box. What do I do?</summary>
+        <p>Read the message in the box. It says what's wrong. Most often the file is the hours summary instead of the Punch Report, or it covers the wrong dates. Export the Punch Report again and add that. Click Remove to take out the bad file.</p></details>
+      <details class="faq"><summary>Someone is missing from the list.</summary>
+        <p>They have no punches and no scheduled shifts in the week you picked. Check that the export includes everyone (all departments) and the full week.</p></details>
+      <details class="faq"><summary>Someone shows the wrong role or bonus rate.</summary>
+        <p>Click their name and change <b>Role</b> (Driver, Warehouse or Not eligible) or <b>Bonus rate</b> (Weekdays, Weekends or Nights). The page remembers this for future weeks. To change a whole department at once, open <b>Settings</b> at the bottom and use <b>Departments</b>.</p></details>
+      <details class="faq"><summary>Someone was a minute late. Is that really a "no"?</summary>
+        <p>The flyer says no lates and no exceptions, so the page counts even one minute. If the company decides to allow a few minutes, change <b>Grace minutes</b> in Settings. Otherwise, use the Decision box for a one-off exception and write down who approved it.</p></details>
+      <details class="faq"><summary>What are the meal-break notes?</summary>
+        <p>They point out lunches shorter than 30 minutes, or lunch starting more than 8 hours into a shift. Nevada law requires a 30-minute meal break. These notes don't affect the bonus, but a manager should follow up.</p></details>
+      <details class="faq"><summary>Is the pay information safe? Where do my decisions go?</summary>
+        <p>The files are read only in your browser and are never uploaded. When you close the page, they're gone, so add them again next time. Your decisions, notes and settings are saved in <b>this browser on this computer</b>. Use the same computer and browser to pick up where you left off. Always download or copy the final report for payroll.</p></details>
+      <details class="faq"><summary>Can I try it without real data?</summary>
+        <p>Yes. Click <b>Load example data</b> to see made-up employees covering every situation. Add your real files when you're ready, and the example data is replaced.</p></details>
+    </div>
+    <div class="row"><button class="btn" data-action="closehelp">Hide these instructions</button><span class="muted" style="font-size:13px">Open them again any time from "How to use this page".</span></div>
+  </details>
 
   <section class="panel" aria-labelledby="filesH">
     <div class="toolbar">
@@ -752,6 +836,7 @@ function wire(){
         decisions[`${state.week}|${r.key}`] = {status:'yes', note:'Approved without schedule check'};
       LS.set('decisions', decisions); state.bulkConfirm = false; render(); toast('Marked as Qualifies.');
     }
+    else if(a==='closehelp'){ $('#help').open = false; LS.set('helpClosed', true); $('#help').scrollIntoView({block:'nearest'}); }
     else if(a==='resetsettings'){ Object.assign(S, clone(DEFAULTS)); saveSettings(); fillSettings(); render(); toast('Settings reset to the flyer amounts.'); }
     else if(a==='copy' || a==='template'){
       const text = a==='copy' ? exportRows().map(r => r.map(c => String(c).replace(/[\t\n]/g,' ')).join('\t')).join('\n') : TEMPLATE;
@@ -804,6 +889,8 @@ async function start(){
   $('#who').textContent = name ? `Signed in as ${name}` : 'Signed in';
   $('#gate').hidden = true; $('#app').hidden = false;
   wire();
+  if(LS.get('helpClosed', false)) $('#help').open = false;
+  $('#help').addEventListener('toggle', () => LS.set('helpClosed', !$('#help').open));
   state.files = exampleFiles(); state.example = true; rebuild(); render();
   try{ downloads = await use('downloads'); }catch(e){ downloads = null; }
   render();
