@@ -195,10 +195,12 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
     <summary>How to use this page</summary>
 
     <ol class="steps">
-      <li><h4>Export the punches from the timeclock</h4>
-        <p>In the timeclock website, run the <b>Punch Report</b> for the whole pay week, <b>Sunday through Saturday</b>. Save it as CSV or Excel. The <b>Timecard Report</b> for each employee also works. The hours summary (one line of totals per person) does <b>not</b> work, because it has no clock-in times.</p></li>
-      <li><h4>Add the schedule (recommended)</h4>
-        <p>The page can only catch lates, early outs and call-outs if it knows when people were supposed to work. Click <b>Get schedule template</b>, fill in one line per person per shift (Last Name, First Name, Date, Start, End, Shift) and save it as CSV. Put any <b>mandatory overtime</b> in the End time.</p></li>
+      <li><h4>Add the Attendance Tracker</h4>
+        <p>Add the <b>Attendance Tracker</b> Excel file as it is. The page reads each person's type (Warehouse, Surge, LSI…), crew (Days, Nights or Weekends) and daily codes. From those it knows who was scheduled each day and catches tardies (T), early outs (LE, ED) and absences (UA, UCA, NCNS). Keep the tracker up to date before running the report.</p></li>
+      <li><h4>Add the punches from the timeclock (recommended)</h4>
+        <p>Punches let the page check exact clock-in and clock-out times, down to the minute. In the timeclock website, run the <b>Punch Report</b> for the whole pay week, <b>Sunday through Saturday</b>. Save it as CSV or Excel. The <b>Timecard Report</b> for each employee also works. The hours summary (one line of totals per person) does <b>not</b> work, because it has no clock-in times.</p></li>
+      <li><h4>Only for unusual weeks: a schedule</h4>
+        <p>Normally the tracker is enough. Crews are scheduled Days Mon–Thu 6:00 AM–4:30 PM, Nights Mon–Thu 4:00 PM–2:30 AM and Weekends Fri–Sun 6:00 AM–6:30 PM, plus any OT day in the tracker. If someone worked different hours, click <b>Get schedule template</b>, fill it in and add it. A schedule overrides the tracker for that person.</p></li>
       <li><h4>Drop the files in</h4>
         <p>Drag the files onto <b>Add files</b>, or click <b>Choose files</b>. You can add several at once. Each file gets a green ✓ with how many employees and which days it covers. A red box means the file couldn't be used, and it tells you why.</p></li>
       <li><h4>Pick the pay week</h4>
@@ -225,7 +227,10 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
       <div class="box">
         <h4 class="t">Why someone needs review</h4>
         <ul style="font-size:14px">
-          <li><b>No schedule uploaded</b>: without the schedule, lates and call-outs can't be checked. Add the schedule, or decide each person yourself.</li>
+          <li><b>A code like EOA, LA, EA, ADA or V</b>: approved early out, approved late, excused absence, doctor appointment or vacation. The flyer says "no exceptions", so decide each one. To treat a code the same way every time, change it in Settings › Attendance tracker codes.</li>
+          <li><b>No attendance code</b>: the tracker is blank on a day the person's crew works. Fill in the tracker, then add it again.</li>
+          <li><b>Tracker says P but no punches</b>: the tracker and timeclock disagree. Check which one is right.</li>
+          <li><b>No attendance tracker or schedule</b>: the person isn't in the tracker. Check the name matches, or decide yourself.</li>
           <li><b>Clock-in or clock-out entered by hand</b>: a manager typed the time in. Make sure it's the real time before approving.</li>
           <li><b>No clock-out</b>: the person forgot to punch out, or is still at work.</li>
           <li><b>Punch data ends before the week is over</b>: the export doesn't cover the whole week. Export again after Saturday.</li>
@@ -267,7 +272,7 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
     <div class="drop" id="dropAll">
       <h3>Add files</h3>
       <p style="font-size:15px">Drag your timeclock exports here, or choose them from your computer. Add as many as you like at once. The page works out what each file is.</p>
-      <p class="muted" style="font-size:13px">Works with the Punch Report, the Timecard Report (by employee) and a schedule. CSV or Excel.</p>
+      <p class="muted" style="font-size:13px">Works with the Attendance Tracker, the Punch Report, the Timecard Report (by employee) and a schedule. CSV or Excel.</p>
       <label class="btn primary pick" for="fileAll">Choose files</label>
       <input type="file" id="fileAll" accept=".csv,.txt,.tsv,.xlsx,.xls" multiple>
       <ul class="filelist" id="fileList"></ul>
@@ -316,8 +321,12 @@ details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;
         <span style="font-size:14px">Weekend crew works mostly on:</span>
         <div class="days7" id="setWeekend"></div>
       </fieldset>
+      <fieldset><legend>Standard shifts (used with the attendance tracker)</legend><div id="shiftFields" style="display:flex;flex-direction:column;gap:10px"></div>
+        <p class="muted" style="font-size:12px">A crew is scheduled on its checked days. Any other day with a code in the tracker, such as OT, also counts as scheduled.</p>
+      </fieldset>
+      <fieldset><legend>Attendance tracker codes</legend><div id="codeFields" style="display:flex;flex-direction:column;gap:6px"></div></fieldset>
       <fieldset><legend>Departments</legend><div id="deptFields" style="display:flex;flex-direction:column;gap:8px"></div>
-        <p class="muted" style="font-size:12px">Dept codes from the punch report decide who's a driver, warehouse, or not eligible (for example, staffing agency workers).</p>
+        <p class="muted" style="font-size:12px">The tracker's Type column and the punch report's dept codes decide who's a driver, warehouse, or not eligible (for example, staffing agency workers).</p>
       </fieldset>
     </div>
     <div class="row"><button class="btn" data-action="resetsettings">Reset settings to the flyer</button></div>
@@ -334,10 +343,23 @@ const LS = {
 };
 const DEFAULTS = {
   amounts:{driver:{weekday:160,weekend:144,nights:180}, warehouse:{weekday:80,weekend:72,nights:100}},
-  grace:0, mealMin:30, nightFrom:'14:00', nightTo:'04:00', weekendDays:[5,6,0], deptMap:{}
+  grace:0, mealMin:30, nightFrom:'14:00', nightTo:'04:00', weekendDays:[5,6,0], deptMap:{},
+  shifts:{ weekday:{days:[1,2,3,4], start:'06:00', end:'16:30'},
+           nights:{days:[1,2,3,4], start:'16:00', end:'02:30'},
+           weekend:{days:[5,6,0], start:'06:00', end:'18:30'} },
+  codes:{P:'ok', OT:'ok', EI:'ok', DO:'off', H:'off', T:'bad', LE:'bad', ED:'bad', UA:'bad', UCA:'bad', NCNS:'bad',
+         EOA:'review', LA:'review', EA:'review', ADA:'review', V:'review'}
 };
+/* Codes used in the Attendance Tracker (Sheet2 legend). */
+const CODE_INFO = {P:'Present', OT:'Overtime', EI:'Early in', DO:'Day off', H:'Holiday', T:'Tardy (more than 5 min late)',
+  LE:'Left early (before 4 hours)', ED:'Early departure (after 4 hours)', UA:'Unplanned absence', UCA:'Unplanned absence, days in a row',
+  NCNS:'No call, no show', EOA:'Early out, approved', LA:'Late, approved', EA:'Excused absence', ADA:'Approved doctor appointment', V:'Vacation'};
+const CODE_CAT = {ok:'Counts as worked', off:'Day off (not scheduled)', review:'Needs review', bad:'Does not qualify'};
+const ABSENT = new Set(['UA','UCA','NCNS','EA','ADA','V']);
 const clone = o => JSON.parse(JSON.stringify(o));
 const S = Object.assign(clone(DEFAULTS), LS.get('settings', {}));
+S.codes = Object.assign(clone(DEFAULTS.codes), S.codes || {});
+S.shifts = Object.assign(clone(DEFAULTS.shifts), S.shifts || {});
 let roster = LS.get('roster', {});       // key -> {role, shift}
 let decisions = LS.get('decisions', {}); // "week|key" -> {status, note}
 
@@ -351,6 +373,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const ROLE = {driver:'Driver', warehouse:'Warehouse', none:'Not eligible'};
 const SHIFT = {weekday:'Weekdays', weekend:'Weekends', nights:'Nights'};
+const SHIFT_TRACKER = {weekday:'Days', nights:'Nights', weekend:'Weekends'};
 const STATUS = {yes:'Qualifies', review:'Needs review', no:'Does not qualify', na:'Not eligible'};
 const money = n => '$' + (Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0, maximumFractionDigits:2});
 const dateOf = d => new Date(d*86400000);
@@ -415,6 +438,7 @@ function guessDelim(text){
 }
 
 /* ---------- file reading ---------- */
+const SHEET_BREAK = '\u0001sheet';
 function readRows(file){
   return new Promise((resolve, reject) => {
     const r = new FileReader(); const isX = /\.xls[xm]?$/i.test(file.name);
@@ -426,7 +450,7 @@ function readRows(file){
         if(isX || looksZip || looksOle){
           if(!window.XLSX) throw new Error("Excel files can't be read right now. In Excel, use File › Save As › CSV, then add the CSV.");
           const wb = XLSX.read(r.result, {type:'array'});
-          resolve(wb.SheetNames.flatMap(n => parseCSV(XLSX.utils.sheet_to_csv(wb.Sheets[n], {rawNumbers:false}))));
+          resolve(wb.SheetNames.flatMap(n => [[SHEET_BREAK], ...parseCSV(XLSX.utils.sheet_to_csv(wb.Sheets[n], {rawNumbers:false}))]));
         } else { const t = decodeText(r.result); resolve(parseCSV(t, guessDelim(t))); }
       }catch(e){ reject(e); }
     };
@@ -459,10 +483,33 @@ const isHeader = c => c.date>=0 && ((c.in>=0 && c.out>=0) || (c.start>=0 && c.en
 const TITLE_NAME = /^(?:time ?card(?: report)?|employee(?: name)?|name|associate)\s*[:\-–]\s*(.+)$/i;
 
 function interpret(rows){
-  const recs = []; let cols=null, kind=null, sectionName='', lastDay=null, lastDept='', sawSummary=false, sawHeader=false;
+  const recs = []; let cols=null, kind=null, sectionName='', lastDay=null, lastDept='', sawSummary=false, sawHeader=false, tracker=null;
   for(const r of rows){
+    if(r[0]===SHEET_BREAK){ cols=null; tracker=null; sectionName=''; lastDay=null; continue; }
     const cells = r.map(clean);
     if(!cells.some(Boolean)) continue;
+    // Attendance Tracker: First Name, Last Name, Shift … then one column per date holding a code (P, DO, OT, UA …)
+    const up = cells.map(normHead);
+    const fI = up.findIndex(x => COLS.first.test(x)), lI = up.findIndex(x => COLS.last.test(x));
+    if(fI>=0 && lI>=0){
+      const dateCols = cells.map((c,i) => ({i, day: /\d/.test(c) ? parseDate(c) : null})).filter(x => x.day!=null);
+      if(dateCols.length>=7){
+        tracker = {first:fI, last:lI, type: up.findIndex(x => /^TYPE\b/.test(x)), status: up.findIndex(x => /^STATUS\b/.test(x)), shift: up.findIndex(x => /^SHIFT$/.test(x)), dateCols};
+        cols=null; sawHeader=true; continue;
+      }
+      if(!isHeader(mapHeader(cells))){ tracker=null; cols=null; continue; }   // some other roster table
+    }
+    if(tracker){
+      const f = cells[tracker.first], l = cells[tracker.last]; if(!f && !l) continue;
+      const key = normKey(l+' '+f), display = f && l ? `${l}, ${f}` : (l||f);
+      const type = tracker.type>=0 ? cells[tracker.type].toUpperCase() : '';
+      const sh = tracker.shift>=0 ? cells[tracker.shift].toLowerCase() : '';
+      const shift = /night/.test(sh) ? 'nights' : /weekend/.test(sh) ? 'weekend' : /day/.test(sh) ? 'weekday' : '';
+      const active = tracker.status>=0 ? /^act/i.test(cells[tracker.status]) : true;
+      recs.push({kind:'roster', key, display, type, shift, active});
+      for(const dc of tracker.dateCols){ const code = (cells[dc.i]||'').toUpperCase(); if(code) recs.push({kind:'tracker', key, display, day:dc.day, code, active}); }
+      continue;
+    }
     // A title line like "Timecard Report : Carolina  Barajas Osuna" names the employee for the rows under it.
     const t = cells.find(Boolean), tm = cells.filter(Boolean).length<=2 && t.match(TITLE_NAME);
     if(tm && !/northern|department|all_/i.test(tm[1])){ sectionName = clean(tm[1]); lastDay=null; continue; }
@@ -495,7 +542,7 @@ function interpret(rows){
         role: /driv/.test(ro)?'driver' : /ware|wh/.test(ro)?'warehouse' : ''});
     }
   }
-  if(recs.length) return {kind: recs.some(r => r.kind==='punch') ? 'punch' : 'schedule', recs};
+  if(recs.length) return {kind: recs.some(r => r.kind==='punch') ? 'punch' : recs.some(r => r.kind==='tracker') ? 'tracker' : 'schedule', recs};
   if(sawSummary) throw new Error("This is the hours summary. It only has weekly totals, with no clock-in or clock-out times, so it can't show lates or missed shifts. In the timeclock, export the Punch Report (or the Timecard Report by employee) instead.");
   if(sawHeader) throw new Error("The columns were found, but no rows had a date and a clock-in time. Check that the export covers the right dates.");
   const peek = rows.find(r => r.filter(c => clean(c)).length >= 3);
@@ -550,8 +597,12 @@ function buildShifts(ivs){
 
 function rebuild(){
   const emps = new Map(), seen = new Set();
-  const getEmp = (key, display) => { if(!emps.has(key)) emps.set(key, {key, display, ivs:[], depts:{}, sched:[], shifts:[]}); return emps.get(key); };
-  let maxDay = null; state.schedWeeks = new Set();
+  const getEmp = (key, display) => {
+    if(!emps.has(key)) emps.set(key, {key, display, ivs:[], depts:{}, sched:[], shifts:[], tr:null, codes:new Map()});
+    const e = emps.get(key); if(display.includes(',') && !e.display.includes(',')) e.display = display; return e;
+  };
+  let maxDay = null, trackerMax = null; state.schedWeeks = new Set();
+  const weeks = new Set();
   for(const f of state.files){
     for(const r of f.recs){
       if(r.kind==='punch'){
@@ -561,19 +612,28 @@ function rebuild(){
         e.ivs.push({day:r.day, start:st, end:en, manual:r.manual, dept:r.dept});
         if(r.dept) e.depts[r.dept] = (e.depts[r.dept]||0)+1;
         maxDay = maxDay==null ? r.day : Math.max(maxDay, r.day);
+      } else if(r.kind==='roster'){
+        const e = getEmp(r.key, r.display);
+        if(!e.tr || (r.active && !e.tr.active)) e.tr = {type:r.type, shift:r.shift, active:r.active};
+      } else if(r.kind==='tracker'){
+        const e = getEmp(r.key, r.display);
+        if(!e.codes.has(r.day) || r.active) e.codes.set(r.day, r.code);
+        if(S.codes[r.code]!=='off'){ trackerMax = trackerMax==null ? r.day : Math.max(trackerMax, r.day); weeks.add(weekOf(r.day)); }
       } else {
         const sig = `S|${r.key}|${r.day}|${r.start}`; if(seen.has(sig)) continue; seen.add(sig);
         getEmp(r.key, r.display).sched.push(r); state.schedWeeks.add(weekOf(r.day));
       }
     }
   }
-  const weeks = new Set();
   for(const e of emps.values()){
     e.shifts = buildShifts(e.ivs);
     e.mainDept = majority(Object.keys(e.depts).flatMap(k => Array(e.depts[k]).fill(k))) || '';
     e.shifts.forEach(s => weeks.add(weekOf(s.day))); e.sched.forEach(s => weeks.add(weekOf(s.day)));
   }
-  state.employees = emps; state.maxDay = maxDay;
+  state.employees = emps; state.punchMax = maxDay; state.trackerMax = trackerMax;
+  maxDay = [maxDay, trackerMax].filter(x => x!=null).reduce((a,b) => Math.max(a,b), -Infinity);
+  if(maxDay===-Infinity) maxDay = null;
+  state.maxDay = maxDay;
   state.weeks = [...weeks].sort((a,b) => b-a);
   if(!state.weeks.includes(state.week)){
     const done = state.weeks.filter(w => maxDay!=null && w+6<=maxDay);
@@ -610,32 +670,82 @@ function mealIssues(s){
   return out;
 }
 
+function trackerSchedule(emp, ws){
+  if(!emp.codes.size) return null;
+  let any = false;
+  for(let d=ws; d<=ws+6; d++){ const c = emp.codes.get(d); if(c && S.codes[c]!=='off') any = true; }
+  if(!any) return null;
+  const def = emp.tr && S.shifts[emp.tr.shift], out = [];
+  for(let d=ws; d<=ws+6; d++){
+    const code = emp.codes.get(d) || '', cat = code ? (S.codes[code] || 'review') : '';
+    const base = !!def && def.days.includes(dow(d));
+    if(cat==='off' || (!base && !code)) continue;   // day off, or not a crew day and nothing recorded
+    out.push({day:d, code, cat, base, start: def ? toMin(def.start) : null, end: def ? toMin(def.end) : null, shift: emp.tr?.shift || ''});
+  }
+  return out;
+}
+function matchShift(shifts, used, aS, aE){
+  let best=null, bd=Infinity;
+  for(const s of shifts){
+    if(used.has(s)) continue;
+    const d = Math.abs(s.start-aS), overlap = s.start<aE && (s.end ?? s.start+1)>aS;
+    if((d<=360 || overlap) && d<bd){ best=s; bd=d; }
+  }
+  return best;
+}
+const absTimes = (day, start, end) => { const aS = day*1440 + start; return [aS, day*1440 + end + (end<=start ? 1440 : 0)]; };
+
 function evaluate(emp, ws){
   const we = ws+6;
   const shifts = emp.shifts.filter(s => s.day>=ws && s.day<=we);
   const sched = emp.sched.filter(e => e.day>=ws && e.day<=we).sort((a,b) => a.day-b.day || a.start-b.start);
-  if(!shifts.length && !sched.length) return null;
-  const r = {key:emp.key, name:emp.display, shifts, sched, dq:[], review:[], notes:[], days:[]};
-  r.dept = majority(shifts.map(s => s.dept).filter(Boolean)) || emp.mainDept;
+  const tsched = sched.length ? null : trackerSchedule(emp, ws);
+  if(!shifts.length && !sched.length && !tsched) return null;
+  const r = {key:emp.key, name:emp.display, shifts, sched, tsched, dq:[], review:[], notes:[], days:[]};
+  r.dept = emp.tr?.type || majority(shifts.map(s => s.dept).filter(Boolean)) || emp.mainDept;
   const ros = roster[emp.key] || {};
   const sRole = majority(sched.map(e => e.role).filter(Boolean));
   r.autoRole = sRole || deptRole(r.dept);
   r.role = ros.role || r.autoRole;
-  const sShift = majority(sched.map(e => e.shift).filter(Boolean));
+  const sShift = majority(sched.map(e => e.shift).filter(Boolean)) || emp.tr?.shift || '';
   const auto = autoShift(shifts.length ? shifts.map(s => s.start) : sched.map(e => e.day*1440+e.start));
   r.autoShift = sShift || auto.type;
   r.shift = ros.shift || r.autoShift;
   r.hours = shifts.reduce((a,s) => a + (s.worked||0), 0);
-
   const used = new Set();
-  for(const e of sched){
-    const aS = e.day*1440 + e.start, aE = e.day*1440 + e.end + (e.end<=e.start ? 1440 : 0);
-    let best=null, bd=Infinity;
-    for(const s of shifts){
-      if(used.has(s)) continue;
-      const d = Math.abs(s.start-aS), overlap = s.start<aE && (s.end ?? s.start+1)>aS;
-      if((d<=360 || overlap) && d<bd){ best=s; bd=d; }
+
+  if(tsched){
+    // Attendance Tracker: crew days from the standard shifts, plus any day with a code (e.g. mandatory OT)
+    for(const e of tsched){
+      const info = CODE_INFO[e.code] || `Code ${e.code}`, row = {day:e.day, code:e.code, sched:null, shift:null, flags:[]};
+      let aS=null, aE=null;
+      if(e.start!=null){ [aS, aE] = absTimes(e.day, e.start, e.end); row.sched = {start:aS, end:aE}; }
+      if(!e.code){
+        if(state.maxDay!=null && e.day<=state.maxDay){ r.review.push({code:'nocode', t:`No attendance code in the tracker for ${fmtDay(e.day)}, a scheduled ${SHIFT_TRACKER[e.shift]||''} shift day.`}); row.flags.push(['warn','No code']); }
+      } else if(e.cat==='bad'){ r.dq.push(`${info} on ${fmtDay(e.day)} (tracker code ${e.code})`); row.flags.push(['bad', `${e.code} · ${info}`]); }
+      else if(e.cat==='review'){ r.review.push({code:'code', t:`${info} on ${fmtDay(e.day)} (tracker code ${e.code}). Decide whether it counts.`}); row.flags.push(['warn', `${e.code} · ${info}`]); }
+      if(aS!=null && shifts.length && !ABSENT.has(e.code)){
+        const best = matchShift(shifts, used, aS, aE);
+        if(best){
+          used.add(best); row.shift = best;
+          if(e.base && e.cat!=='bad' && e.code!=='LA'){
+            const late = best.start - aS;
+            if(late > S.grace){ r.dq.push(`Late ${fmtDay(e.day)}: clocked in ${fmtTime(best.start)}, shift starts ${fmtTime(aS)} (${fmtMins(late)})`); row.flags.push(['bad',`Late ${late} min`]); }
+          }
+          if(e.base && e.cat!=='bad' && e.code!=='EOA' && best.end!=null){
+            const early = aE - best.end;
+            if(early > S.grace){ r.dq.push(`Left early ${fmtDay(e.day)}: clocked out ${fmtTime(best.end)}, shift ends ${fmtTime(aE)} (${fmtMins(early)})`); row.flags.push(['bad',`Left ${early} min early`]); }
+          }
+        } else if(e.cat==='ok' && state.punchMax!=null && e.day<=state.punchMax){
+          r.review.push({code:'nopunch', t:`Tracker says ${e.code} on ${fmtDay(e.day)}, but there are no clock punches that day.`}); row.flags.push(['warn','No punches']);
+        }
+      }
+      r.days.push(row);
     }
+  }
+  for(const e of sched){
+    const [aS, aE] = absTimes(e.day, e.start, e.end);
+    const best = matchShift(shifts, used, aS, aE);
     const row = {day:e.day, sched:{start:aS, end:aE}, shift:best, flags:[]};
     if(!best){ r.dq.push(`Missed scheduled shift ${fmtDay(e.day)} (${fmtTime(aS)}–${fmtTime(aE)})`); row.flags.push(['bad','Missed shift']); }
     else{
@@ -649,7 +759,8 @@ function evaluate(emp, ws){
     }
     r.days.push(row);
   }
-  for(const s of shifts) if(!used.has(s)) r.days.push({day:s.day, sched:null, shift:s, flags: sched.length ? [['info','Not scheduled']] : []});
+  const hasPlan = sched.length || tsched;
+  for(const s of shifts) if(!used.has(s)) r.days.push({day:s.day, sched:null, shift:s, flags: hasPlan ? [['info','Not scheduled']] : []});
   r.days.sort((a,b) => a.day-b.day || (a.shift?.start??0)-(b.shift?.start??0));
 
   const open=[], manual=[], manualBrk=[];
@@ -660,14 +771,17 @@ function evaluate(emp, ws){
     if(s.manualBreak){ manualBrk.push(s.day); row.flags.push(['info','Lunch entered by hand']); }
     for(const m of mealIssues(s)){ r.notes.push(`${fmtDay(s.day)}: ${m}`); row.flags.push(['info', m.charAt(0).toUpperCase()+m.slice(1)]); }
   }
-  if(!sched.length) r.review.push({code:'nosched', t: state.schedWeeks.has(ws)
-    ? "Not on the uploaded schedule for this week, so lates, early outs and call-outs can't be checked."
-    : "No schedule uploaded for this week, so lates, early outs and call-outs can't be checked."});
+  if(!hasPlan) r.review.push({code:'nosched', t: state.schedWeeks.has(ws)
+    ? "Not on the uploaded schedule or attendance tracker for this week, so lates, early outs and call-outs can't be checked."
+    : "No attendance tracker or schedule for this week, so lates, early outs and call-outs can't be checked."});
+  if(tsched && !emp.tr?.shift) r.review.push({code:'noshift', t:'No shift (Days, Nights or Weekends) in the tracker, so scheduled days are unknown.'});
   if(open.length) r.review.push({code:'open', t:`No clock-out on ${listDays(open)}.`});
   if(manual.length) r.review.push({code:'manual', t:`Clock-in or clock-out entered by hand on ${listDays(manual)}. Confirm the real times.`});
-  if(state.maxDay!=null && state.maxDay<we) r.review.push({code:'partial', t:`Punch data ends ${fmtDay(state.maxDay)}, before the week is over.`});
+  if(state.maxDay!=null && state.maxDay<we) r.review.push({code:'partial', t:`Data ends ${fmtDay(state.maxDay)}, before the week is over.`});
   if(!ros.shift && !sShift && auto.mixed) r.review.push({code:'mixed', t:'Worked both day and night shifts. Confirm which bonus rate applies.'});
   if(manualBrk.length) r.notes.push(`Lunch punch entered by hand on ${listDays(manualBrk)}`);
+  r.workedDays = shifts.length || (tsched ? tsched.filter(e => e.cat==='ok').length : 0);
+  r.planDays = sched.length || (tsched ? tsched.length : 0);
 
   r.autoStatus = r.role==='none' ? 'na' : r.dq.length ? 'no' : r.review.length ? 'review' : 'yes';
   r.decision = r.role==='none' ? null : (decisions[`${ws}|${emp.key}`] || null);
@@ -680,7 +794,7 @@ function why(r){
   if(r.status==='na') return r.dept ? `Dept ${r.dept} isn't eligible` : 'No department';
   if(r.status==='no') return r.dq[0] + (r.dq.length>1 ? ` (+${r.dq.length-1} more)` : '');
   if(r.status==='review') return r.review[0].t + (r.review.length>1 ? ` (+${r.review.length-1} more)` : '');
-  return r.sched.length ? 'Every scheduled shift worked in full' : '';
+  return (r.sched.length || r.tsched) ? 'Every scheduled shift worked in full' : '';
 }
 
 /* ---------- render ---------- */
@@ -716,8 +830,8 @@ function rowHTML(r){
     <td><button class="namebtn" data-action="toggle" data-k="${esc(r.key)}" aria-expanded="${open}"><span class="car">▶</span>${esc(r.name)}</button></td>
     <td>${ROLE[r.role]}${roleTag}</td>
     <td>${r.role==='none' ? '—' : SHIFT[r.shift]}${shiftTag}</td>
-    <td class="r num">${r.shifts.length}${r.sched.length ? `<span class="tag">of ${r.sched.length} sched.</span>` : ''}</td>
-    <td class="r num">${fmtDur(r.hours)}</td>
+    <td class="r num">${r.workedDays}${r.planDays ? `<span class="tag">of ${r.planDays} sched.</span>` : ''}</td>
+    <td class="r num">${r.shifts.length ? fmtDur(r.hours) : '—'}</td>
     <td><span class="pill ${r.status} ${r.decision?'set':''}">${STATUS[r.status]}</span></td>
     <td class="r num">${r.amount ? money(r.amount) : '—'}</td>
     <td class="why">${esc(why(r))}</td></tr>`;
@@ -735,8 +849,8 @@ function detailHTML(r){
   </div>`;
   const list = (title, cls, items) => items.length ? `<div><h3>${title}</h3><ul class="${cls}">${items.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : '';
   const reasons = `<div class="reasons">${list('Disqualified because','bad',r.dq)}${list('Needs a look','warn',r.review.map(x=>x.t))}${list('Meal-break notes (Nevada requires 30 min within 8 hrs)','',r.notes)}${!r.dq.length&&!r.review.length&&!r.notes.length?'<p class="muted">Nothing flagged this week.</p>':''}</div>`;
-  const days = `<div style="overflow-x:auto"><table class="days"><thead><tr><th>Day</th><th>Scheduled</th><th>In</th><th>Out</th><th>Lunch</th><th>Worked</th><th>Flags</th></tr></thead><tbody>${
-    r.days.map(d => { const s = d.shift; return `<tr><td>${fmtDay(d.day)}</td><td>${d.sched ? `${fmtTime(d.sched.start)}–${fmtTime(d.sched.end)}` : '—'}</td><td>${s ? fmtTime(s.start) : '—'}</td><td>${s ? (s.end==null ? 'missing' : fmtTime(s.end)) : '—'}</td><td>${s && s.breaks.length ? s.breaks.map(b => `${fmtTime(b.start)} (${b.end-b.start}m)`).join(', ') : '—'}</td><td>${s ? fmtDur(s.worked) : '—'}</td><td>${d.flags.map(([c,t]) => `<span class="flag ${c}">${esc(t)}</span>`).join('')}</td></tr>`; }).join('')
+  const days = `<div style="overflow-x:auto"><table class="days"><thead><tr><th>Day</th><th>Code</th><th>Scheduled</th><th>In</th><th>Out</th><th>Lunch</th><th>Worked</th><th>Flags</th></tr></thead><tbody>${
+    r.days.map(d => { const s = d.shift; return `<tr><td>${fmtDay(d.day)}</td><td>${d.code ? `<b title="${esc(CODE_INFO[d.code]||'')}">${esc(d.code)}</b>` : '—'}</td><td>${d.sched ? `${fmtTime(d.sched.start)}–${fmtTime(d.sched.end)}` : '—'}</td><td>${s ? fmtTime(s.start) : '—'}</td><td>${s ? (s.end==null ? 'missing' : fmtTime(s.end)) : '—'}</td><td>${s && s.breaks.length ? s.breaks.map(b => `${fmtTime(b.start)} (${b.end-b.start}m)`).join(', ') : '—'}</td><td>${s ? fmtDur(s.worked) : '—'}</td><td>${d.flags.map(([c,t]) => `<span class="flag ${c}">${esc(t)}</span>`).join('')}</td></tr>`; }).join('')
   }</tbody></table></div>`;
   return `<div class="dgrid"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">${controls}${reasons}</div><div style="min-width:0">${days}</div></div>`;
 }
@@ -746,20 +860,28 @@ function renderRates(){
 }
 function renderFiles(){
   const what = f => {
-    const people = new Set(f.recs.map(r => r.key)).size, days = f.recs.map(r => r.day);
+    const people = new Set(f.recs.filter(r => r.kind!=='roster').map(r => r.key)).size;
+    let lo=Infinity, hi=-Infinity; for(const r of f.recs) if(r.day!=null && (r.kind!=='tracker' || S.codes[r.code]!=='off')){ lo=Math.min(lo,r.day); hi=Math.max(hi,r.day); }
+    const days = lo===Infinity ? [] : [lo, hi];
     const range = days.length ? `${fmtDay(Math.min(...days))} – ${fmtDay(Math.max(...days))}` : '';
-    return `<span class="ok">✓ ${f.kind==='punch' ? 'Clock punches' : 'Schedule'}</span> <span class="muted">· ${people} ${people===1?'employee':'employees'} · ${range}</span>`;
+    return `<span class="ok">✓ ${{punch:'Clock punches', tracker:'Attendance tracker', schedule:'Schedule'}[f.kind]}</span> <span class="muted">· ${people} ${people===1?'employee':'employees'} · ${range}</span>`;
   };
   const li = f => `<li class="${f.error?'bad':''}"><span class="fname"><b title="${esc(f.name)}">${esc(f.name)}</b>${f.error ? `<span class="err">${esc(f.error)}</span>` : what(f)}</span><button class="btn small" data-action="rmfile" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`;
   $('#fileList').innerHTML = state.files.map(li).join('');
 }
 let settingsDrawn = false;
 function renderSettings(){
-  const depts = [...new Set([...state.employees.values()].flatMap(e => Object.keys(e.depts)))].sort();
+  const depts = [...new Set([...state.employees.values()].flatMap(e => [...Object.keys(e.depts), e.tr?.type].filter(Boolean)))].sort();
   $('#deptFields').innerHTML = depts.length ? depts.map(d => `<label>${esc(d)}<select data-set="dept" data-d="${esc(d)}">${['driver','warehouse','none'].map(v => `<option value="${v}" ${deptRole(d)===v?'selected':''}>${ROLE[v]}</option>`).join('')}</select></label>`).join('') : '<p class="muted" style="font-size:13px">Add a punch report to list departments.</p>';
   if(settingsDrawn) return; settingsDrawn = true;
   $('#amtFields').innerHTML = ['driver','warehouse'].flatMap(role => ['weekday','weekend','nights'].map(s =>
     `<label>${ROLE[role]} · ${SHIFT[s]}<input type="number" min="0" step="1" id="amt-${role}-${s}" data-set="amt" data-role="${role}" data-s="${s}"></label>`)).join('');
+  $('#shiftFields').innerHTML = ['weekday','nights','weekend'].map(k => `<div style="display:flex;flex-direction:column;gap:4px">
+      <b style="font-size:14px">${SHIFT_TRACKER[k]}</b>
+      <label>Start <input type="time" id="sh-${k}-start" data-set="shiftdef" data-k="${k}" data-f="start"></label>
+      <label>End <input type="time" id="sh-${k}-end" data-set="shiftdef" data-k="${k}" data-f="end"></label>
+      <div class="days7">${DOW.map((d,i) => `<label><input type="checkbox" id="sh-${k}-d${i}" data-set="shiftday" data-k="${k}">${d}</label>`).join('')}</div></div>`).join('');
+  $('#codeFields').innerHTML = Object.keys(CODE_INFO).map(c => `<label><span><b>${c}</b> <span class="muted" style="font-size:12px">${esc(CODE_INFO[c])}</span></span><select id="code-${c}" data-set="code" data-c="${c}" style="width:190px">${Object.entries(CODE_CAT).map(([v,t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>`).join('');
   $('#setWeekend').innerHTML = DOW.map((d,i) => `<label><input type="checkbox" data-set="wkd" value="${i}" id="wkd${i}">${d}</label>`).join('');
   fillSettings();
 }
@@ -767,6 +889,8 @@ function fillSettings(){
   for(const role of ['driver','warehouse']) for(const s of ['weekday','weekend','nights']) $(`#amt-${role}-${s}`).value = S.amounts[role][s];
   $('#setGrace').value = S.grace; $('#setMeal').value = S.mealMin; $('#setNightFrom').value = S.nightFrom; $('#setNightTo').value = S.nightTo;
   DOW.forEach((_,i) => $('#wkd'+i).checked = S.weekendDays.includes(i));
+  for(const k of ['weekday','nights','weekend']){ $(`#sh-${k}-start`).value = S.shifts[k].start; $(`#sh-${k}-end`).value = S.shifts[k].end; DOW.forEach((_,i) => $(`#sh-${k}-d${i}`).checked = S.shifts[k].days.includes(i)); }
+  for(const c of Object.keys(CODE_INFO)) $('#code-'+c).value = S.codes[c] || 'review';
 }
 const saveSettings = () => LS.set('settings', S);
 
@@ -774,7 +898,7 @@ const saveSettings = () => LS.set('settings', S);
 function exportRows(){
   const head = ['Week','Employee','Department','Role','Bonus Rate','Shifts Worked','Shifts Scheduled','Hours Worked','Status','Bonus Amount','Reasons','Reviewer Note'];
   const wk = `${fmtDate(state.week)} - ${fmtDate(state.week+6)}`;
-  return [head, ...state.results.map(r => [wk, r.name, r.dept, ROLE[r.role], r.role==='none'?'':SHIFT[r.shift], r.shifts.length, r.sched.length, fmtDur(r.hours), STATUS[r.status], r.amount.toFixed(2),
+  return [head, ...state.results.map(r => [wk, r.name, r.dept, ROLE[r.role], r.role==='none'?'':SHIFT[r.shift], r.workedDays, r.planDays, r.shifts.length ? fmtDur(r.hours) : '', STATUS[r.status], r.amount.toFixed(2),
     [...r.dq, ...r.review.map(x=>x.t)].join(' | '), r.decision?.note || ''])];
 }
 const toast = t => { $('#toast').textContent = t; clearTimeout(toast.t); toast.t = setTimeout(() => $('#toast').textContent = '', 5000); };
@@ -867,6 +991,9 @@ function wire(){
     const s = t.dataset.set; if(!s && !['setGrace','setMeal','setNightFrom','setNightTo'].includes(t.id)) return;
     if(s==='amt') S.amounts[t.dataset.role][t.dataset.s] = Math.max(0, +t.value || 0);
     else if(s==='dept') S.deptMap[t.dataset.d] = t.value;
+    else if(s==='shiftdef'){ if(t.value) S.shifts[t.dataset.k][t.dataset.f] = t.value; }
+    else if(s==='shiftday'){ const k = t.dataset.k; S.shifts[k].days = DOW.map((_,i) => i).filter(i => $(`#sh-${k}-d${i}`).checked); }
+    else if(s==='code'){ S.codes[t.dataset.c] = t.value; saveSettings(); rebuild(); render(); return; }
     else if(s==='wkd') S.weekendDays = DOW.map((_,i) => i).filter(i => $('#wkd'+i).checked);
     else if(t.id==='setGrace') S.grace = Math.max(0, +t.value || 0);
     else if(t.id==='setMeal') S.mealMin = Math.max(0, +t.value || 0);
