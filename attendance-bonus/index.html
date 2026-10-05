@@ -1,0 +1,761 @@
+<title>Attendance Bonus Builder</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+/* Layout: one working column. Files strip, then the week ledger (totals over a ruled employee table), settings folded at the end. */
+:root{
+  --bg:#f2f4f8; --surface:#ffffff; --sunk:#e9edf4; --ink:#16213a; --muted:#56627c; --line:#d6dce8;
+  --navy:#1b2a4a; --on-navy:#ffffff; --blue:#2c67c9; --gold:#e2a32c; --gold-ink:#7a5208;
+  --ok:#1d7f47; --ok-bg:#e1f2e8; --warn:#9a5c00; --warn-bg:#fcefd6; --bad:#b0322a; --bad-bg:#fae3e1; --na:#5f6676; --na-bg:#eceef3;
+  --display:"Archivo","Arial Narrow",system-ui,sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1524; --surface:#172036; --sunk:#111a2c; --ink:#e6ebf5; --muted:#9aa6c0; --line:#2a3653;
+  --navy:#22345c; --on-navy:#ffffff; --blue:#6f9cf0; --gold:#f0b84a; --gold-ink:#f0c674;
+  --ok:#5fd394; --ok-bg:#143326; --warn:#f2b453; --warn-bg:#3a2a10; --bad:#ff8a80; --bad-bg:#3d1a1a; --na:#a3abbd; --na-bg:#232c40;
+  color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1524; --surface:#172036; --sunk:#111a2c; --ink:#e6ebf5; --muted:#9aa6c0; --line:#2a3653;
+  --navy:#22345c; --on-navy:#ffffff; --blue:#6f9cf0; --gold:#f0b84a; --gold-ink:#f0c674;
+  --ok:#5fd394; --ok-bg:#143326; --warn:#f2b453; --warn-bg:#3a2a10; --bad:#ff8a80; --bad-bg:#3d1a1a; --na:#a3abbd; --na-bg:#232c40;
+  color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:15px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:16px;padding-block:20px 64px;display:flex;flex-direction:column;gap:20px}
+h1,h2,h3{font-family:var(--display);margin:0;text-wrap:balance;letter-spacing:-.01em}
+h1{font-size:clamp(26px,4vw,36px);font-weight:800;line-height:1.05}
+h2{font-size:20px;font-weight:800}
+h3{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+p{margin:0}
+.muted{color:var(--muted)}
+.mono,.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:end;justify-content:space-between;border-bottom:3px solid var(--navy);padding-bottom:14px}
+.eyebrow{font-family:var(--display);font-weight:600;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--blue)}
+.who{font-size:13px;color:var(--muted)}
+
+/* rules strip */
+.rules{background:var(--navy);color:var(--on-navy);border-radius:10px;padding:14px 18px;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 24px}
+.rules b{font-family:var(--display);color:var(--gold);letter-spacing:.06em;font-size:12px;text-transform:uppercase;display:block}
+.rules p{font-size:14px}
+.rates{width:100%;border-collapse:collapse;font-size:14px}
+.rates td{padding:1px 0}
+.rates td:last-child{text-align:right;font-family:var(--mono)}
+
+/* panels */
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.files{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.drop{border:2px dashed var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--sunk);transition:border-color .15s}
+.drop.over{border-color:var(--blue)}
+.drop label.pick{align-self:flex-start}
+.drop input[type=file]{position:absolute;width:1px;height:1px;opacity:0}
+.filelist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13px}
+.filelist li{display:flex;gap:8px;align-items:center;justify-content:space-between;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:4px 8px;min-width:0}
+.filelist li span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.err{color:var(--bad)}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:6px;padding:6px 12px;font-weight:500;font-size:14px}
+.btn:hover{border-color:var(--blue)}
+.btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn.small{padding:2px 8px;font-size:12px}
+.btn.link{border:0;background:none;color:var(--blue);padding:0;text-decoration:underline}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.banner{background:var(--warn-bg);color:var(--warn);border-radius:8px;padding:10px 14px;font-size:14px}
+.privacy{font-size:13px;color:var(--muted)}
+
+/* week bar + tiles */
+.weekbar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;justify-content:space-between}
+.weekbar select{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-weight:600}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:2px;text-align:left;background:var(--surface)}
+.tile[aria-pressed=true]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.tile .k{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+.tile .v{font-family:var(--display);font-weight:800;font-size:28px;line-height:1.1}
+.tile .s{font-size:13px;color:var(--muted)}
+.tile.yes .v{color:var(--ok)} .tile.review .v{color:var(--warn)} .tile.no .v{color:var(--bad)} .tile.na .v{color:var(--na)}
+.confirm{background:var(--warn-bg);border-radius:8px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+
+/* ledger */
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px}
+table.ledger{width:100%;border-collapse:collapse;font-size:14px;min-width:820px}
+.ledger th{text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:2px solid var(--line);background:var(--sunk);white-space:nowrap}
+.ledger td{padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+.ledger tr.main:hover td{background:var(--sunk)}
+.ledger td.r,.ledger th.r{text-align:right}
+.namebtn{border:0;background:none;padding:0;font-weight:600;text-align:left;display:flex;gap:6px;align-items:baseline}
+.namebtn .car{font-size:11px;color:var(--muted);transition:transform .15s;display:inline-block}
+.namebtn[aria-expanded=true] .car{transform:rotate(90deg)}
+.pill{display:inline-block;border-radius:999px;padding:1px 10px;font-size:12px;font-weight:600;white-space:nowrap}
+.pill.yes{background:var(--ok-bg);color:var(--ok)} .pill.review{background:var(--warn-bg);color:var(--warn)}
+.pill.no{background:var(--bad-bg);color:var(--bad)} .pill.na{background:var(--na-bg);color:var(--na)}
+.pill.set{outline:1px dashed currentColor;outline-offset:-1px}
+.why{font-size:13px;color:var(--muted);max-width:420px}
+.tag{font-size:11px;color:var(--muted);display:block}
+tr.detail td{background:var(--sunk);padding:14px}
+.dgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+@media (max-width:760px){.dgrid{grid-template-columns:1fr}}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.controls label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);font-weight:600}
+.controls select,.controls input{padding:5px 8px;border:1px solid var(--line);border-radius:6px;background:var(--surface);font-weight:400;font-size:14px;color:var(--ink)}
+.reasons{display:flex;flex-direction:column;gap:8px;font-size:14px}
+.reasons ul{margin:2px 0 0;padding-left:18px}
+.reasons .bad{color:var(--bad)} .reasons .warn{color:var(--warn)}
+table.days{width:100%;border-collapse:collapse;font-size:13px;font-family:var(--mono);font-variant-numeric:tabular-nums}
+.days th{font-family:var(--body);text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:4px 6px;border-bottom:1px solid var(--line)}
+.days td{padding:4px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.flag{font-family:var(--body);font-size:11px;border-radius:4px;padding:0 6px;margin-right:4px;display:inline-block;white-space:nowrap}
+.flag.bad{background:var(--bad-bg);color:var(--bad)} .flag.warn{background:var(--warn-bg);color:var(--warn)} .flag.info{background:var(--na-bg);color:var(--na)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.toolbar input[type=search]{padding:6px 10px;border:1px solid var(--line);border-radius:6px;background:var(--surface);min-width:0;width:220px;max-width:100%}
+.empty{padding:24px;text-align:center;color:var(--muted)}
+
+/* settings */
+details.panel>summary{cursor:pointer;font-family:var(--display);font-weight:800;font-size:18px}
+.sgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px}
+.sgrid fieldset{border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.sgrid legend{font-weight:600;font-size:13px;padding:0 4px}
+.sgrid label{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:14px}
+.sgrid input[type=number],.sgrid input[type=time],.sgrid select{padding:4px 6px;border:1px solid var(--line);border-radius:6px;background:var(--surface);width:110px}
+.days7{display:flex;flex-wrap:wrap;gap:6px}
+.days7 label{gap:4px}
+
+/* gate */
+.gate{min-height:70vh;display:grid;place-items:center;padding-inline:16px}
+.gatecard{max-width:440px;background:var(--surface);border:1px solid var(--line);border-top:4px solid var(--navy);border-radius:10px;padding:24px;display:flex;flex-direction:column;gap:10px}
+.lock{width:40px;height:40px;border-radius:50%;background:var(--navy);display:grid;place-items:center}
+.lock svg{width:20px;height:20px;fill:none;stroke:var(--gold);stroke-width:2}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div id="gate" class="gate">
+  <div class="gatecard" role="status" aria-live="polite">
+    <div class="lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+    <h2 id="gateTitle">Checking your sign-in…</h2>
+    <p id="gateText" class="muted">This page holds employee pay information. It opens only for people signed in to claude.ai who have been given access.</p>
+  </div>
+</div>
+
+<div id="app" class="wrap" hidden>
+  <header class="top">
+    <div>
+      <div class="eyebrow">Northern Nevada 3PL × Bearpaw</div>
+      <h1>Perfect Attendance Bonus</h1>
+    </div>
+    <div class="who" id="who"></div>
+  </header>
+
+  <section class="rules" aria-label="Bonus rules">
+    <div>
+      <b>Drivers, per week</b>
+      <table class="rates"><tbody id="ratesDriver"></tbody></table>
+    </div>
+    <div>
+      <b>Warehouse, per week</b>
+      <table class="rates"><tbody id="ratesWare"></tbody></table>
+    </div>
+    <div>
+      <b>To qualify</b>
+      <p>Work every scheduled shift and all mandatory overtime in full. No lates, no early outs, no call-outs. Sent home for performance or conduct means no bonus. No exceptions.</p>
+    </div>
+  </section>
+
+  <section class="panel" aria-labelledby="filesH">
+    <div class="toolbar">
+      <h2 id="filesH">Timeclock files</h2>
+      <div class="row">
+        <button class="btn" data-action="template">Get schedule template</button>
+        <button class="btn" data-action="sample" id="sampleBtn">Load example data</button>
+        <button class="btn" data-action="clearfiles">Clear all files</button>
+      </div>
+    </div>
+    <div id="exampleBanner" class="banner" hidden>You're looking at example data with made-up employees. Add your punch report to replace it.</div>
+    <div class="files">
+      <div class="drop" data-kind="punch" id="dropPunch">
+        <h3>1 · Punch report</h3>
+        <p class="muted" style="font-size:14px">The <span class="mono">Punch_Report</span> export: one row per punch with date, in, out and dept code. CSV or Excel.</p>
+        <label class="btn primary pick" for="filePunch">Choose punch files</label>
+        <input type="file" id="filePunch" accept=".csv,.txt,.xlsx,.xls" multiple>
+        <ul class="filelist" id="listPunch"></ul>
+      </div>
+      <div class="drop" data-kind="schedule" id="dropSched">
+        <h3>2 · Schedule</h3>
+        <p class="muted" style="font-size:14px">Needed to catch lates, early outs and call-outs. Columns: Last Name, First Name, Date, Start, End, Shift. Put mandatory overtime in the End time.</p>
+        <label class="btn primary pick" for="fileSched">Choose schedule files</label>
+        <input type="file" id="fileSched" accept=".csv,.txt,.xlsx,.xls" multiple>
+        <ul class="filelist" id="listSched"></ul>
+      </div>
+    </div>
+    <p class="privacy">Files are read inside this browser tab and are never uploaded. Close the tab and they're gone. Your rate settings and review decisions are remembered in this browser only.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="weekH" id="report">
+    <div class="weekbar">
+      <div class="row">
+        <h2 id="weekH">Pay week</h2>
+        <select id="weekSel" aria-label="Pay week"></select>
+      </div>
+      <div class="row">
+        <button class="btn" data-action="copy">Copy for Excel</button>
+        <button class="btn primary" data-action="download" id="dlBtn" hidden>Download CSV</button>
+      </div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+    <div id="bulk"></div>
+    <div class="toolbar">
+      <p class="muted" style="font-size:13px" id="countLine"></p>
+      <input type="search" id="search" placeholder="Find employee" aria-label="Find employee">
+    </div>
+    <div class="tablewrap">
+      <table class="ledger">
+        <thead><tr><th>Employee</th><th>Role</th><th>Shift</th><th class="r">Shifts</th><th class="r">Hours</th><th>Status</th><th class="r">Bonus</th><th>Why</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+    <p id="toast" class="muted" style="font-size:13px" role="status" aria-live="polite"></p>
+  </section>
+
+  <details class="panel" id="settings">
+    <summary>Settings</summary>
+    <div class="sgrid">
+      <fieldset><legend>Bonus amounts ($ per week)</legend><div id="amtFields" style="display:flex;flex-direction:column;gap:8px"></div></fieldset>
+      <fieldset><legend>Attendance</legend>
+        <label>Grace minutes for late / early out <input type="number" id="setGrace" min="0" max="30"></label>
+        <label>Shortest legal lunch (minutes) <input type="number" id="setMeal" min="0" max="120"></label>
+        <p class="muted" style="font-size:12px">The flyer says no lates and no exceptions, so grace starts at 0.</p>
+      </fieldset>
+      <fieldset><legend>Shift type when not set by hand</legend>
+        <label>Night shift if start is after <input type="time" id="setNightFrom"></label>
+        <label>…or before <input type="time" id="setNightTo"></label>
+        <span style="font-size:14px">Weekend crew works mostly on:</span>
+        <div class="days7" id="setWeekend"></div>
+      </fieldset>
+      <fieldset><legend>Departments</legend><div id="deptFields" style="display:flex;flex-direction:column;gap:8px"></div>
+        <p class="muted" style="font-size:12px">Dept codes from the punch report decide who's a driver, warehouse, or not eligible (for example, staffing agency workers).</p>
+      </fieldset>
+    </div>
+    <div class="row"><button class="btn" data-action="resetsettings">Reset settings to the flyer</button></div>
+  </details>
+</div>
+
+<script>
+(() => {
+'use strict';
+/* ---------- storage (per browser, best effort) ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('apb.'+k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('apb.'+k, JSON.stringify(v)); }catch(e){} }
+};
+const DEFAULTS = {
+  amounts:{driver:{weekday:160,weekend:144,nights:180}, warehouse:{weekday:80,weekend:72,nights:100}},
+  grace:0, mealMin:30, nightFrom:'14:00', nightTo:'04:00', weekendDays:[5,6,0], deptMap:{}
+};
+const clone = o => JSON.parse(JSON.stringify(o));
+const S = Object.assign(clone(DEFAULTS), LS.get('settings', {}));
+let roster = LS.get('roster', {});       // key -> {role, shift}
+let decisions = LS.get('decisions', {}); // "week|key" -> {status, note}
+
+const state = { files:[], employees:new Map(), schedWeeks:new Set(), weeks:[], week:null, maxDay:null,
+  filter:'all', search:'', open:new Set(), example:false, bulkConfirm:false, results:[] };
+let downloads = null;
+
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const ROLE = {driver:'Driver', warehouse:'Warehouse', none:'Not eligible'};
+const SHIFT = {weekday:'Weekdays', weekend:'Weekends', nights:'Nights'};
+const STATUS = {yes:'Qualifies', review:'Needs review', no:'Does not qualify', na:'Not eligible'};
+const money = n => '$' + (Math.round(n*100)/100).toLocaleString('en-US',{minimumFractionDigits:0, maximumFractionDigits:2});
+const dateOf = d => new Date(d*86400000);
+const dow = d => dateOf(d).getUTCDay();
+const fmtDay = d => { const t = dateOf(d); return `${DOW[t.getUTCDay()]} ${t.getUTCMonth()+1}/${t.getUTCDate()}`; };
+const fmtDate = d => { const t = dateOf(d); return `${t.getUTCMonth()+1}/${t.getUTCDate()}/${t.getUTCFullYear()}`; };
+const mod = (a,b) => ((a % b) + b) % b;
+const fmtTime = abs => { const m = mod(abs,1440); let h = Math.floor(m/60); const ap = h>=12?'PM':'AM'; h = h%12 || 12; return `${h}:${String(m%60).padStart(2,'0')} ${ap}`; };
+const fmtDur = m => m==null ? '—' : `${Math.floor(m/60)}:${String(Math.round(m%60)).padStart(2,'0')}`;
+const fmtMins = m => m >= 60 ? `${fmtDur(m)} hrs` : `${m} min`;
+const toMin = s => { const [h,m] = String(s||'0:0').split(':').map(Number); return (h||0)*60 + (m||0); };
+const normKey = s => String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' ');
+const clean = s => String(s||'').replace(/\s+/g,' ').trim();
+const weekOf = d => d - dow(d);
+const listDays = ds => ds.map(fmtDay).join(', ');
+function majority(arr){ const c={}; let best=null; for(const v of arr){ c[v]=(c[v]||0)+1; if(best==null || c[v]>c[best]) best=v; } return best; }
+
+function parseDate(s){
+  s = clean(s); let m;
+  if((m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/))){ let y=+m[3]; if(y<100) y+=2000; return Date.UTC(y,+m[1]-1,+m[2])/86400000; }
+  if((m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/))) return Date.UTC(+m[1],+m[2]-1,+m[3])/86400000;
+  return null;
+}
+function parseTime(s){
+  s = clean(s).toUpperCase(); const m = s.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])?\.?M?\.?$/);
+  if(!m) return null; let h=+m[1]; const mi=+m[2];
+  if(m[3]){ h = h%12 + (m[3]==='P'?12:0); }
+  if(h>23 || mi>59) return null; return h*60+mi;
+}
+function parseCSV(text){
+  const rows=[]; let row=[], f='', q=false;
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===','){ row.push(f); f=''; }
+    else if(c==='\n' || c==='\r'){ if(c==='\r' && text[i+1]==='\n') i++; row.push(f); rows.push(row); row=[]; f=''; }
+    else f+=c;
+  }
+  if(f!=='' || row.length){ row.push(f); rows.push(row); }
+  return rows;
+}
+
+/* ---------- file reading ---------- */
+function readRows(file){
+  return new Promise((resolve, reject) => {
+    const r = new FileReader(); const isX = /\.xlsx?$/i.test(file.name);
+    r.onerror = () => reject(new Error("The file couldn't be read."));
+    r.onload = () => {
+      try{
+        if(isX){
+          if(!window.XLSX) throw new Error('Excel support did not load. Save the file as CSV and try again.');
+          const wb = XLSX.read(r.result, {type:'array'});
+          resolve(parseCSV(XLSX.utils.sheet_to_csv(wb.Sheets[wb.SheetNames[0]], {rawNumbers:false})));
+        } else resolve(parseCSV(String(r.result)));
+      }catch(e){ reject(e); }
+    };
+    isX ? r.readAsArrayBuffer(file) : r.readAsText(file);
+  });
+}
+
+function interpret(rows, name){
+  let h=-1, up=null;
+  for(let i=0;i<Math.min(rows.length,25);i++){
+    const u = rows[i].map(c => clean(c).toUpperCase());
+    if(u.includes('DATE') && ((u.includes('IN') && u.includes('OUT')) || u.some(x=>/^START/.test(x)))){ h=i; up=u; break; }
+  }
+  if(h<0) throw new Error('No header row with DATE plus IN/OUT (punch report) or Start/End (schedule) was found.');
+  const find = re => up.findIndex(x => re.test(x));
+  const c = {
+    last: find(/^(EMP(LOYEE)?\s*)?L(AST)?\.?\s*NAME$/), first: find(/^(EMP(LOYEE)?\s*)?F(IRST)?\.?\s*NAME$/),
+    full: find(/^(EMPLOYEE\s*NAME|EMP\s*NAME|NAME|EMPLOYEE)$/), date: up.indexOf('DATE'),
+    in: up.indexOf('IN'), out: up.indexOf('OUT'), dept: find(/DEPT|DEPARTMENT/),
+    start: find(/^START/), end: find(/^(END|STOP)/), shift: find(/SHIFT/), role: find(/^(ROLE|POSITION|JOB)/)
+  };
+  if(c.last<0 && c.full<0) throw new Error('No employee name column was found.');
+  const kind = (c.in>=0 && c.out>=0) ? 'punch' : 'schedule';
+  if(kind==='schedule' && (c.start<0 || c.end<0)) throw new Error('A schedule needs Start and End columns.');
+  const recs = [];
+  for(const r of rows.slice(h+1)){
+    const day = parseDate(r[c.date]); if(day==null) continue;
+    let display, key;
+    if(c.last>=0){ const l=clean(r[c.last]), f=c.first>=0?clean(r[c.first]):''; if(!l && !f) continue; display = f ? `${l}, ${f}` : l; key = normKey(l+' '+f); }
+    else { display = clean(r[c.full]); if(!display) continue; key = normKey(display); }
+    if(kind==='punch'){
+      const tin = parseTime(r[c.in]); if(tin==null) continue;
+      recs.push({kind, key, display, day, tin, tout:parseTime(r[c.out]), dept: c.dept>=0 ? clean(r[c.dept]).toUpperCase() : '', manual: r.some(x => /manual\s*edit/i.test(x))});
+    } else {
+      const st = parseTime(r[c.start]), en = parseTime(r[c.end]); if(st==null || en==null) continue;
+      const sh = c.shift>=0 ? clean(r[c.shift]).toLowerCase() : '', ro = c.role>=0 ? clean(r[c.role]).toLowerCase() : '';
+      recs.push({kind, key, display, day, start:st, end:en,
+        shift: /night/.test(sh)?'nights' : /weekend/.test(sh)?'weekend' : /week\s*day|day/.test(sh)?'weekday' : '',
+        role: /driv/.test(ro)?'driver' : /ware|wh/.test(ro)?'warehouse' : ''});
+    }
+  }
+  if(!recs.length) throw new Error('The header was found, but no rows had a valid date and time.');
+  return {kind, recs};
+}
+
+async function addFiles(fileList, slot){
+  if(state.example){ state.files = []; state.example = false; }
+  for(const f of fileList){
+    const entry = {id: Math.random().toString(36).slice(2), name:f.name, kind:null, recs:[], error:null, slot};
+    try{ const res = interpret(await readRows(f), f.name); entry.kind=res.kind; entry.recs=res.recs; }
+    catch(e){ entry.error = e.message || String(e); }
+    state.files.push(entry);
+  }
+  rebuild(); render();
+}
+
+/* ---------- shifts ---------- */
+function buildShifts(ivs){
+  const span = iv => iv.end==null ? 1e9 : iv.end - iv.start;
+  const byDay = new Map();
+  for(const iv of ivs){ if(!byDay.has(iv.day)) byDay.set(iv.day, []); byDay.get(iv.day).push(iv); }
+  for(const list of byDay.values()){        // lunch after midnight that kept the shift's date
+    if(list.length<2) continue;
+    const main = list.reduce((a,b) => span(b)>span(a) ? b : a), mEnd = main.end ?? main.start+960;
+    for(const iv of list){
+      if(iv===main) continue;
+      const e = iv.end ?? iv.start;
+      if(!(iv.start>=main.start && e<=mEnd) && iv.start+1440>=main.start && e+1440<=mEnd){ iv.start+=1440; if(iv.end!=null) iv.end+=1440; }
+    }
+  }
+  const sorted = ivs.slice().sort((a,b) => a.start-b.start || span(b)-span(a));
+  const shifts = [];
+  for(const iv of sorted){
+    const cur = shifts[shifts.length-1];
+    if(cur){
+      const cEnd = cur.end ?? cur.start+960;
+      if(iv.end!=null && iv.start>=cur.start && iv.end<=cEnd){ cur.breaks.push({start:iv.start, end:iv.end}); cur.manualBreak ||= iv.manual; continue; }
+      if(cur.end!=null && iv.start>=cur.end && iv.start-cur.end<=120){ cur.breaks.push({start:cur.end, end:iv.start}); cur.end = iv.end; cur.manualEdge ||= iv.manual; continue; }
+    }
+    shifts.push({start:iv.start, end:iv.end, breaks:[], manualEdge:iv.manual, manualBreak:false, dept:iv.dept});
+  }
+  for(const s of shifts){
+    s.breaks.sort((a,b) => a.start-b.start);
+    s.day = Math.floor(s.start/1440);
+    s.brk = s.breaks.reduce((a,b) => a + (b.end-b.start), 0);
+    s.worked = s.end==null ? null : s.end - s.start - s.brk;
+  }
+  return shifts;
+}
+
+function rebuild(){
+  const emps = new Map(), seen = new Set();
+  const getEmp = (key, display) => { if(!emps.has(key)) emps.set(key, {key, display, ivs:[], depts:{}, sched:[], shifts:[]}); return emps.get(key); };
+  let maxDay = null; state.schedWeeks = new Set();
+  for(const f of state.files){
+    for(const r of f.recs){
+      if(r.kind==='punch'){
+        const sig = `${r.key}|${r.day}|${r.tin}|${r.tout}`; if(seen.has(sig)) continue; seen.add(sig);
+        const e = getEmp(r.key, r.display), st = r.day*1440 + r.tin;
+        let en = r.tout==null ? null : r.day*1440 + r.tout; if(en!=null && en<st) en += 1440;
+        e.ivs.push({day:r.day, start:st, end:en, manual:r.manual, dept:r.dept});
+        if(r.dept) e.depts[r.dept] = (e.depts[r.dept]||0)+1;
+        maxDay = maxDay==null ? r.day : Math.max(maxDay, r.day);
+      } else {
+        const sig = `S|${r.key}|${r.day}|${r.start}`; if(seen.has(sig)) continue; seen.add(sig);
+        getEmp(r.key, r.display).sched.push(r); state.schedWeeks.add(weekOf(r.day));
+      }
+    }
+  }
+  const weeks = new Set();
+  for(const e of emps.values()){
+    e.shifts = buildShifts(e.ivs);
+    e.mainDept = majority(Object.keys(e.depts).flatMap(k => Array(e.depts[k]).fill(k))) || '';
+    e.shifts.forEach(s => weeks.add(weekOf(s.day))); e.sched.forEach(s => weeks.add(weekOf(s.day)));
+  }
+  state.employees = emps; state.maxDay = maxDay;
+  state.weeks = [...weeks].sort((a,b) => b-a);
+  if(!state.weeks.includes(state.week)){
+    const done = state.weeks.filter(w => maxDay!=null && w+6<=maxDay);
+    state.week = done[0] ?? state.weeks[0] ?? null;
+  }
+  state.open.clear(); state.bulkConfirm = false;
+}
+
+/* ---------- rules ---------- */
+function deptRole(code){
+  if(!code) return 'none';
+  if(S.deptMap[code]) return S.deptMap[code];
+  if(/WARE|WHSE|\bWH\b/.test(code)) return 'warehouse';
+  if(/DRIV|DRV|TRUCK|TRANS|DELIV|FLEET|CDL/.test(code)) return 'driver';
+  return 'none';
+}
+function isNight(abs){
+  const m = mod(abs,1440), a = toMin(S.nightFrom), b = toMin(S.nightTo);
+  return a>b ? (m>=a || m<b) : (m>=a && m<b);
+}
+function autoShift(starts){
+  const n = starts.length; if(!n) return {type:'weekday', mixed:false};
+  const night = starts.filter(isNight).length;
+  const wk = starts.filter(a => S.weekendDays.includes(dow(Math.floor(a/1440)))).length;
+  return {type: night*2>=n ? 'nights' : wk*2>n ? 'weekend' : 'weekday', mixed: night>0 && night<n};
+}
+function mealIssues(s){
+  const out = []; if(s.end==null) return out;
+  const span = s.end - s.start;
+  if(!s.breaks.length){ if(span>480) out.push(`no lunch punch in ${fmtDur(span)} on the clock`); return out; }
+  for(const b of s.breaks){ const d = b.end-b.start; if(d < S.mealMin) out.push(`${d}-min lunch`); }
+  const first = s.breaks[0].start - s.start; if(first>480) out.push(`lunch began ${fmtDur(first)} after clock-in`);
+  const after = s.end - s.breaks[s.breaks.length-1].end; if(after>480) out.push(`${fmtDur(after)} worked after lunch`);
+  return out;
+}
+
+function evaluate(emp, ws){
+  const we = ws+6;
+  const shifts = emp.shifts.filter(s => s.day>=ws && s.day<=we);
+  const sched = emp.sched.filter(e => e.day>=ws && e.day<=we).sort((a,b) => a.day-b.day || a.start-b.start);
+  if(!shifts.length && !sched.length) return null;
+  const r = {key:emp.key, name:emp.display, shifts, sched, dq:[], review:[], notes:[], days:[]};
+  r.dept = majority(shifts.map(s => s.dept).filter(Boolean)) || emp.mainDept;
+  const ros = roster[emp.key] || {};
+  const sRole = majority(sched.map(e => e.role).filter(Boolean));
+  r.autoRole = sRole || deptRole(r.dept);
+  r.role = ros.role || r.autoRole;
+  const sShift = majority(sched.map(e => e.shift).filter(Boolean));
+  const auto = autoShift(shifts.length ? shifts.map(s => s.start) : sched.map(e => e.day*1440+e.start));
+  r.autoShift = sShift || auto.type;
+  r.shift = ros.shift || r.autoShift;
+  r.hours = shifts.reduce((a,s) => a + (s.worked||0), 0);
+
+  const used = new Set();
+  for(const e of sched){
+    const aS = e.day*1440 + e.start, aE = e.day*1440 + e.end + (e.end<=e.start ? 1440 : 0);
+    let best=null, bd=Infinity;
+    for(const s of shifts){
+      if(used.has(s)) continue;
+      const d = Math.abs(s.start-aS), overlap = s.start<aE && (s.end ?? s.start+1)>aS;
+      if((d<=360 || overlap) && d<bd){ best=s; bd=d; }
+    }
+    const row = {day:e.day, sched:{start:aS, end:aE}, shift:best, flags:[]};
+    if(!best){ r.dq.push(`Missed scheduled shift ${fmtDay(e.day)} (${fmtTime(aS)}–${fmtTime(aE)})`); row.flags.push(['bad','Missed shift']); }
+    else{
+      used.add(best);
+      const late = best.start - aS;
+      if(late > S.grace){ r.dq.push(`Late ${fmtDay(e.day)}: clocked in ${fmtTime(best.start)}, scheduled ${fmtTime(aS)} (${fmtMins(late)})`); row.flags.push(['bad',`Late ${late} min`]); }
+      if(best.end!=null){
+        const early = aE - best.end;
+        if(early > S.grace){ r.dq.push(`Left early ${fmtDay(e.day)}: clocked out ${fmtTime(best.end)}, scheduled ${fmtTime(aE)} (${fmtMins(early)})`); row.flags.push(['bad',`Left ${early} min early`]); }
+      }
+    }
+    r.days.push(row);
+  }
+  for(const s of shifts) if(!used.has(s)) r.days.push({day:s.day, sched:null, shift:s, flags: sched.length ? [['info','Not scheduled']] : []});
+  r.days.sort((a,b) => a.day-b.day || (a.shift?.start??0)-(b.shift?.start??0));
+
+  const open=[], manual=[], manualBrk=[];
+  for(const row of r.days){
+    const s = row.shift; if(!s) continue;
+    if(s.end==null){ open.push(s.day); row.flags.push(['warn','No clock-out']); }
+    if(s.manualEdge){ manual.push(s.day); row.flags.push(['warn','In/out entered by hand']); }
+    if(s.manualBreak){ manualBrk.push(s.day); row.flags.push(['info','Lunch entered by hand']); }
+    for(const m of mealIssues(s)){ r.notes.push(`${fmtDay(s.day)}: ${m}`); row.flags.push(['info', m.charAt(0).toUpperCase()+m.slice(1)]); }
+  }
+  if(!sched.length) r.review.push({code:'nosched', t: state.schedWeeks.has(ws)
+    ? "Not on the uploaded schedule for this week, so lates, early outs and call-outs can't be checked."
+    : "No schedule uploaded for this week, so lates, early outs and call-outs can't be checked."});
+  if(open.length) r.review.push({code:'open', t:`No clock-out on ${listDays(open)}.`});
+  if(manual.length) r.review.push({code:'manual', t:`Clock-in or clock-out entered by hand on ${listDays(manual)}. Confirm the real times.`});
+  if(state.maxDay!=null && state.maxDay<we) r.review.push({code:'partial', t:`Punch data ends ${fmtDay(state.maxDay)}, before the week is over.`});
+  if(!ros.shift && !sShift && auto.mixed) r.review.push({code:'mixed', t:'Worked both day and night shifts. Confirm which bonus rate applies.'});
+  if(manualBrk.length) r.notes.push(`Lunch punch entered by hand on ${listDays(manualBrk)}`);
+
+  r.autoStatus = r.role==='none' ? 'na' : r.dq.length ? 'no' : r.review.length ? 'review' : 'yes';
+  r.decision = r.role==='none' ? null : (decisions[`${ws}|${emp.key}`] || null);
+  r.status = r.decision?.status || r.autoStatus;
+  r.amount = r.status==='yes' ? (+S.amounts[r.role]?.[r.shift] || 0) : 0;
+  return r;
+}
+function why(r){
+  if(r.decision) return `Set by hand${r.decision.note ? ': '+r.decision.note : ''}`;
+  if(r.status==='na') return r.dept ? `Dept ${r.dept} isn't eligible` : 'No department';
+  if(r.status==='no') return r.dq[0] + (r.dq.length>1 ? ` (+${r.dq.length-1} more)` : '');
+  if(r.status==='review') return r.review[0].t + (r.review.length>1 ? ` (+${r.review.length-1} more)` : '');
+  return r.sched.length ? 'Every scheduled shift worked in full' : '';
+}
+
+/* ---------- render ---------- */
+function render(){
+  renderRates(); renderFiles(); renderSettings();
+  $('#exampleBanner').hidden = !state.example;
+  const ws = state.week;
+  $('#weekSel').innerHTML = state.weeks.map(w => `<option value="${w}" ${w===ws?'selected':''}>${fmtDay(w)} – ${fmtDay(w+6)}, ${dateOf(w+6).getUTCFullYear()}${state.maxDay!=null && state.maxDay<w+6 ? ' (in progress)' : ''}</option>`).join('') || '<option>No data yet</option>';
+  const results = ws==null ? [] : [...state.employees.values()].map(e => evaluate(e, ws)).filter(Boolean).sort((a,b) => a.name.localeCompare(b.name));
+  state.results = results;
+  const cnt = {yes:0, review:0, no:0, na:0}; let total = 0;
+  for(const r of results){ cnt[r.status]++; total += r.amount; }
+  const tile = (k, v, s) => `<button class="tile ${k}" data-action="filter" data-v="${k}" aria-pressed="${state.filter===k}"><span class="k">${STATUS[k]}</span><span class="v num">${v}</span><span class="s">${s}</span></button>`;
+  $('#tiles').innerHTML = tile('yes', cnt.yes, `${money(total)} in bonuses`) + tile('review', cnt.review, 'Need a decision before payroll') + tile('no', cnt.no, 'Late, early out or missed shift') + tile('na', cnt.na, 'Dept not covered by the flyer');
+
+  const bulkable = results.filter(r => r.autoStatus==='review' && !r.decision && r.review.every(x => x.code==='nosched'));
+  $('#bulk').innerHTML = !bulkable.length ? '' : state.bulkConfirm
+    ? `<div class="confirm"><span>Mark ${bulkable.length} employees as Qualifies without checking lates, early outs or call-outs?</span><button class="btn primary" data-action="bulkyes">Mark ${bulkable.length} as Qualifies</button><button class="btn" data-action="bulkno">Cancel</button></div>`
+    : `<div class="row"><button class="btn" data-action="bulkask">Approve ${bulkable.length} whose only issue is the missing schedule</button><span class="muted" style="font-size:13px">Use only if you've checked attendance another way.</span></div>`;
+
+  const q = normKey(state.search);
+  const shown = results.filter(r => (state.filter==='all' || r.status===state.filter) && (!q || normKey(r.name).includes(q) || q.split(' ').every(t => normKey(r.name).includes(t))));
+  $('#countLine').innerHTML = `${shown.length} of ${results.length} employees` + (state.filter!=='all' ? ` · ${STATUS[state.filter]} <button class="btn link" data-action="filter" data-v="all">show all</button>` : '');
+  $('#rows').innerHTML = shown.length ? shown.map(rowHTML).join('') :
+    `<tr><td colspan="8" class="empty">${results.length ? 'No employees match.' : 'Add a punch report to see the bonus report.'}</td></tr>`;
+  $('#dlBtn').hidden = !downloads;
+}
+function rowHTML(r){
+  const open = state.open.has(r.key);
+  const roleTag = roster[r.key]?.role ? '<span class="tag">set by hand</span>' : r.dept ? `<span class="tag">${esc(r.dept)}</span>` : '';
+  const shiftTag = roster[r.key]?.shift ? '<span class="tag">set by hand</span>' : '';
+  let html = `<tr class="main">
+    <td><button class="namebtn" data-action="toggle" data-k="${esc(r.key)}" aria-expanded="${open}"><span class="car">▶</span>${esc(r.name)}</button></td>
+    <td>${ROLE[r.role]}${roleTag}</td>
+    <td>${r.role==='none' ? '—' : SHIFT[r.shift]}${shiftTag}</td>
+    <td class="r num">${r.shifts.length}${r.sched.length ? `<span class="tag">of ${r.sched.length} sched.</span>` : ''}</td>
+    <td class="r num">${fmtDur(r.hours)}</td>
+    <td><span class="pill ${r.status} ${r.decision?'set':''}">${STATUS[r.status]}</span></td>
+    <td class="r num">${r.amount ? money(r.amount) : '—'}</td>
+    <td class="why">${esc(why(r))}</td></tr>`;
+  if(open) html += `<tr class="detail"><td colspan="8">${detailHTML(r)}</td></tr>`;
+  return html;
+}
+function detailHTML(r){
+  const k = esc(r.key), ros = roster[r.key] || {};
+  const opt = (v, label, cur) => `<option value="${v}" ${v===cur?'selected':''}>${label}</option>`;
+  const controls = `<div class="controls">
+    <label>Role<select data-field="role" data-k="${k}">${opt('', `Automatic (${ROLE[r.autoRole]})`, ros.role||'')}${opt('driver','Driver',ros.role)}${opt('warehouse','Warehouse',ros.role)}${opt('none','Not eligible',ros.role)}</select></label>
+    <label>Bonus rate<select data-field="shift" data-k="${k}">${opt('', `Automatic (${SHIFT[r.autoShift]})`, ros.shift||'')}${opt('weekday','Weekdays',ros.shift)}${opt('weekend','Weekends',ros.shift)}${opt('nights','Nights',ros.shift)}</select></label>
+    <label>Decision this week<select data-field="decision" data-k="${k}" ${r.role==='none'?'disabled':''}>${opt('', `Automatic (${STATUS[r.autoStatus]})`, r.decision?.status||'')}${opt('yes','Qualifies',r.decision?.status)}${opt('no','Does not qualify',r.decision?.status)}</select></label>
+    <label>Reason or note<input type="text" data-field="note" data-k="${k}" value="${esc(r.decision?.note||'')}" placeholder="e.g. Sent home for conduct 10/2" ${r.decision?'':'disabled'}></label>
+  </div>`;
+  const list = (title, cls, items) => items.length ? `<div><h3>${title}</h3><ul class="${cls}">${items.map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>` : '';
+  const reasons = `<div class="reasons">${list('Disqualified because','bad',r.dq)}${list('Needs a look','warn',r.review.map(x=>x.t))}${list('Meal-break notes (Nevada requires 30 min within 8 hrs)','',r.notes)}${!r.dq.length&&!r.review.length&&!r.notes.length?'<p class="muted">Nothing flagged this week.</p>':''}</div>`;
+  const days = `<div style="overflow-x:auto"><table class="days"><thead><tr><th>Day</th><th>Scheduled</th><th>In</th><th>Out</th><th>Lunch</th><th>Worked</th><th>Flags</th></tr></thead><tbody>${
+    r.days.map(d => { const s = d.shift; return `<tr><td>${fmtDay(d.day)}</td><td>${d.sched ? `${fmtTime(d.sched.start)}–${fmtTime(d.sched.end)}` : '—'}</td><td>${s ? fmtTime(s.start) : '—'}</td><td>${s ? (s.end==null ? 'missing' : fmtTime(s.end)) : '—'}</td><td>${s && s.breaks.length ? s.breaks.map(b => `${fmtTime(b.start)} (${b.end-b.start}m)`).join(', ') : '—'}</td><td>${s ? fmtDur(s.worked) : '—'}</td><td>${d.flags.map(([c,t]) => `<span class="flag ${c}">${esc(t)}</span>`).join('')}</td></tr>`; }).join('')
+  }</tbody></table></div>`;
+  return `<div class="dgrid"><div style="display:flex;flex-direction:column;gap:14px;min-width:0">${controls}${reasons}</div><div style="min-width:0">${days}</div></div>`;
+}
+function renderRates(){
+  const tr = role => ['weekday','weekend','nights'].map(s => `<tr><td>${SHIFT[s]}</td><td>${money(S.amounts[role][s])}</td></tr>`).join('');
+  $('#ratesDriver').innerHTML = tr('driver'); $('#ratesWare').innerHTML = tr('warehouse');
+}
+function renderFiles(){
+  const li = f => `<li><span title="${esc(f.name)}">${esc(f.name)} ${f.error ? `<span class="err">— ${esc(f.error)}</span>` : `<span class="muted">· ${f.recs.length} rows</span>`}</span><button class="btn small" data-action="rmfile" data-id="${f.id}" aria-label="Remove ${esc(f.name)}">Remove</button></li>`;
+  $('#listPunch').innerHTML = state.files.filter(f => f.kind==='punch' || (f.error && f.slot==='punch')).map(li).join('');
+  $('#listSched').innerHTML = state.files.filter(f => f.kind==='schedule' || (f.error && f.slot!=='punch')).map(li).join('');
+}
+let settingsDrawn = false;
+function renderSettings(){
+  const depts = [...new Set([...state.employees.values()].flatMap(e => Object.keys(e.depts)))].sort();
+  $('#deptFields').innerHTML = depts.length ? depts.map(d => `<label>${esc(d)}<select data-set="dept" data-d="${esc(d)}">${['driver','warehouse','none'].map(v => `<option value="${v}" ${deptRole(d)===v?'selected':''}>${ROLE[v]}</option>`).join('')}</select></label>`).join('') : '<p class="muted" style="font-size:13px">Add a punch report to list departments.</p>';
+  if(settingsDrawn) return; settingsDrawn = true;
+  $('#amtFields').innerHTML = ['driver','warehouse'].flatMap(role => ['weekday','weekend','nights'].map(s =>
+    `<label>${ROLE[role]} · ${SHIFT[s]}<input type="number" min="0" step="1" id="amt-${role}-${s}" data-set="amt" data-role="${role}" data-s="${s}"></label>`)).join('');
+  $('#setWeekend').innerHTML = DOW.map((d,i) => `<label><input type="checkbox" data-set="wkd" value="${i}" id="wkd${i}">${d}</label>`).join('');
+  fillSettings();
+}
+function fillSettings(){
+  for(const role of ['driver','warehouse']) for(const s of ['weekday','weekend','nights']) $(`#amt-${role}-${s}`).value = S.amounts[role][s];
+  $('#setGrace').value = S.grace; $('#setMeal').value = S.mealMin; $('#setNightFrom').value = S.nightFrom; $('#setNightTo').value = S.nightTo;
+  DOW.forEach((_,i) => $('#wkd'+i).checked = S.weekendDays.includes(i));
+}
+const saveSettings = () => LS.set('settings', S);
+
+/* ---------- export ---------- */
+function exportRows(){
+  const head = ['Week','Employee','Department','Role','Bonus Rate','Shifts Worked','Shifts Scheduled','Hours Worked','Status','Bonus Amount','Reasons','Reviewer Note'];
+  const wk = `${fmtDate(state.week)} - ${fmtDate(state.week+6)}`;
+  return [head, ...state.results.map(r => [wk, r.name, r.dept, ROLE[r.role], r.role==='none'?'':SHIFT[r.shift], r.shifts.length, r.sched.length, fmtDur(r.hours), STATUS[r.status], r.amount.toFixed(2),
+    [...r.dq, ...r.review.map(x=>x.t)].join(' | '), r.decision?.note || ''])];
+}
+const toast = t => { $('#toast').textContent = t; clearTimeout(toast.t); toast.t = setTimeout(() => $('#toast').textContent = '', 5000); };
+
+/* ---------- example data (fictional people) ---------- */
+function exampleFiles(){
+  const ws = Date.UTC(2026,8,27)/86400000; // Sun 9/27/2026
+  const people = [
+    {l:'Reyes',f:'Marco',d:'WARE',days:[1,2,3,4,5],s:'6:00',e:'16:30',sh:'Weekday'},
+    {l:'Kim',f:'Dana',d:'DRIV',days:[1,2,3,4,5],s:'5:00',e:'15:30',sh:'Weekday'},
+    {l:'Okafor',f:'Jade',d:'WARE',days:[1,2,3,4],s:'15:30',e:'2:00',sh:'Nights'},
+    {l:'Silva',f:'Pete',d:'WARE',days:[1,2,3,4,5],s:'7:00',e:'17:30',sh:'Weekday',dev:{3:{late:6}}},
+    {l:'Nguyen',f:'Lia',d:'DRIV',days:[1,2,3,4],s:'18:00',e:'4:30',sh:'Nights',dev:{4:{early:45}}},
+    {l:'Brooks',f:'Tasha',d:'WARE',days:[0,5,6],s:'6:00',e:'18:30',sh:'Weekend'},
+    {l:'Ortiz',f:'Sam',d:'WARE',days:[1,2,3,4,5],s:'6:00',e:'16:30',sh:'Weekday',dev:{2:{miss:1}}},
+    {l:'Hale',f:'Jordan',d:'WARE',days:[1,2,3,4,5],s:'16:00',e:'2:30',sh:'Nights',dev:{1:{manual:1},2:{manual:1,lunch:22}}},
+    {l:'Park',f:'Avery',d:'SURGE',days:[1,2,3,4,5],s:'6:00',e:'16:30',sh:'Weekday'},
+    {l:'Diaz',f:'Rosa',d:'DRIV',days:[0,5,6],s:'5:00',e:'17:30',sh:'Weekend',dev:{5:{lunchAt:540}}},
+    {l:'Chen',f:'Eli',d:'WARE',days:[1,2,3,4,5],s:'6:00',e:'16:30',sh:'Weekday',unsched:1}
+  ];
+  const punch = [], sched = [];
+  people.forEach((p, i) => p.days.forEach(dd => {
+    const day = ws+dd, st = toMin(p.s), en0 = toMin(p.e), en = en0<=st ? en0+1440 : en0, dv = (p.dev||{})[dd] || {};
+    if(!p.unsched) sched.push({kind:'schedule', key:normKey(p.l+' '+p.f), display:`${p.l}, ${p.f}`, day, start:st, end:en0, shift:p.sh.toLowerCase(), role:''});
+    if(dv.miss) return;
+    const tin = dv.late ? st+dv.late : st - ((i*7+dd*3)%5), tout = dv.early ? en-dv.early : en + ((i+dd)%4);
+    const ls = st + (dv.lunchAt || 300), le = ls + (dv.lunch || 30 + (dd%2));
+    const key = normKey(p.l+' '+p.f), display = `${p.l}, ${p.f}`;
+    punch.push({kind:'punch', key, display, day, tin:mod(tin,1440), tout:mod(tout,1440), dept:p.d, manual:!!dv.manual});
+    punch.push({kind:'punch', key, display, day, tin:mod(ls,1440), tout:mod(le,1440), dept:p.d, manual:false});
+  }));
+  return [{id:'ex1', name:'Example punch report.csv', kind:'punch', recs:punch}, {id:'ex2', name:'Example schedule.csv', kind:'schedule', recs:sched}];
+}
+const TEMPLATE = 'Last Name,First Name,Date,Start,End,Shift\nReyes,Marco,09/28/2026,6:00 AM,4:30 PM,Weekday\nOkafor,Jade,09/28/2026,3:30 PM,2:00 AM,Nights\nBrooks,Tasha,10/02/2026,6:00 AM,6:30 PM,Weekend\n';
+
+/* ---------- events ---------- */
+function wire(){
+  $('#filePunch').addEventListener('change', e => { addFiles([...e.target.files], 'punch'); e.target.value=''; });
+  $('#fileSched').addEventListener('change', e => { addFiles([...e.target.files], 'schedule'); e.target.value=''; });
+  for(const z of document.querySelectorAll('.drop')){
+    z.addEventListener('dragover', e => { e.preventDefault(); z.classList.add('over'); });
+    z.addEventListener('dragleave', () => z.classList.remove('over'));
+    z.addEventListener('drop', e => { e.preventDefault(); z.classList.remove('over'); if(e.dataTransfer.files.length) addFiles([...e.dataTransfer.files], z.dataset.kind); });
+  }
+  $('#weekSel').addEventListener('change', e => { state.week = +e.target.value; state.open.clear(); state.bulkConfirm=false; render(); });
+  $('#search').addEventListener('input', e => { state.search = e.target.value; render(); });
+
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-action]'); if(!b) return;
+    const a = b.dataset.action;
+    if(a==='toggle'){ const k=b.dataset.k; state.open.has(k) ? state.open.delete(k) : state.open.add(k); render(); }
+    else if(a==='filter'){ state.filter = (state.filter===b.dataset.v && b.dataset.v!=='all') ? 'all' : b.dataset.v; render(); }
+    else if(a==='rmfile'){ state.files = state.files.filter(f => f.id!==b.dataset.id); if(!state.files.length) state.example=false; rebuild(); render(); }
+    else if(a==='clearfiles'){ state.files=[]; state.example=false; rebuild(); render(); }
+    else if(a==='sample'){ state.files = exampleFiles(); state.example = true; rebuild(); render(); }
+    else if(a==='bulkask'){ state.bulkConfirm = true; render(); }
+    else if(a==='bulkno'){ state.bulkConfirm = false; render(); }
+    else if(a==='bulkyes'){
+      for(const r of state.results) if(r.autoStatus==='review' && !r.decision && r.review.every(x => x.code==='nosched'))
+        decisions[`${state.week}|${r.key}`] = {status:'yes', note:'Approved without schedule check'};
+      LS.set('decisions', decisions); state.bulkConfirm = false; render(); toast('Marked as Qualifies.');
+    }
+    else if(a==='resetsettings'){ Object.assign(S, clone(DEFAULTS)); saveSettings(); fillSettings(); render(); toast('Settings reset to the flyer amounts.'); }
+    else if(a==='copy' || a==='template'){
+      const text = a==='copy' ? exportRows().map(r => r.map(c => String(c).replace(/[\t\n]/g,' ')).join('\t')).join('\n') : TEMPLATE;
+      if(a==='template' && downloads){ try{ await downloads.save({filename:'bonus-schedule-template.csv', data:TEMPLATE}); toast('Template saved.'); return; }catch(err){ if(err?.code==='declined') return; } }
+      try{ await navigator.clipboard.writeText(text); toast(a==='copy' ? 'Copied. Paste into Excel.' : 'Template copied. Paste into Excel or a text file and save as CSV.'); }
+      catch(err){ toast("Your browser blocked copying. Use Download CSV instead."); }
+    }
+    else if(a==='download' && downloads){
+      const csv = exportRows().map(r => r.map(c => { c = String(c); return /[",\n]/.test(c) ? `"${c.replace(/"/g,'""')}"` : c; }).join(',')).join('\r\n');
+      try{ await downloads.save({filename:`attendance-bonus-${fmtDate(state.week).replace(/\//g,'-')}.csv`, data:csv}); toast('Report saved.'); }
+      catch(err){ if(err?.code!=='declined') toast("The report couldn't be saved here. Use Copy for Excel instead."); }
+    }
+  });
+
+  document.addEventListener('change', e => {
+    const t = e.target;
+    if(t.dataset.field){
+      const k = t.dataset.k, f = t.dataset.field;
+      if(f==='role' || f==='shift'){ const r = roster[k] || {}; if(t.value) r[f]=t.value; else delete r[f]; if(Object.keys(r).length) roster[k]=r; else delete roster[k]; LS.set('roster', roster); }
+      else{
+        const dk = `${state.week}|${k}`;
+        if(f==='decision'){ if(t.value) decisions[dk] = {status:t.value, note:decisions[dk]?.note||''}; else delete decisions[dk]; }
+        if(f==='note' && decisions[dk]) decisions[dk].note = t.value.trim();
+        LS.set('decisions', decisions);
+      }
+      render(); return;
+    }
+    const s = t.dataset.set; if(!s && !['setGrace','setMeal','setNightFrom','setNightTo'].includes(t.id)) return;
+    if(s==='amt') S.amounts[t.dataset.role][t.dataset.s] = Math.max(0, +t.value || 0);
+    else if(s==='dept') S.deptMap[t.dataset.d] = t.value;
+    else if(s==='wkd') S.weekendDays = DOW.map((_,i) => i).filter(i => $('#wkd'+i).checked);
+    else if(t.id==='setGrace') S.grace = Math.max(0, +t.value || 0);
+    else if(t.id==='setMeal') S.mealMin = Math.max(0, +t.value || 0);
+    else if(t.id==='setNightFrom' && t.value) S.nightFrom = t.value;
+    else if(t.id==='setNightTo' && t.value) S.nightTo = t.value;
+    saveSettings(); render();
+  });
+}
+
+/* ---------- sign-in gate ---------- */
+function lockOut(title, text){ $('#gateTitle').textContent = title; $('#gateText').textContent = text; $('#app').hidden = true; $('#gate').hidden = false; }
+async function start(){
+  const use = window.claude && typeof window.claude.use === 'function' ? window.claude.use.bind(window.claude) : null;
+  if(!use){ lockOut('Sign-in required', 'Open this page from its claude.ai link while signed in. It will not show pay information anywhere else.'); return; }
+  let user = null;
+  try{ user = await use('user'); }catch(e){ user = null; }
+  if(!user){ lockOut('Sign-in required', 'Sign in to claude.ai with the account this page was shared with, then reload. Pay information stays hidden until you do.'); return; }
+  let name = '';
+  try{ const me = await user.me(); name = me?.name || ''; }catch(e){}
+  $('#who').textContent = name ? `Signed in as ${name}` : 'Signed in';
+  $('#gate').hidden = true; $('#app').hidden = false;
+  wire();
+  state.files = exampleFiles(); state.example = true; rebuild(); render();
+  try{ downloads = await use('downloads'); }catch(e){ downloads = null; }
+  render();
+}
+start();
+})();
+</script>
