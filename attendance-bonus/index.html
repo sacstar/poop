@@ -317,7 +317,7 @@ function decodeText(buf){
   else if(b[0]===0xFE && b[1]===0xFF) enc = 'utf-16be';
   else { let z=0; const n=Math.min(b.length,400); for(let i=1;i<n;i+=2) if(b[i]===0) z++; if(n>20 && z > n/5) enc = 'utf-16le'; }
   let t = new TextDecoder(enc).decode(b);
-  if(enc==='utf-8' && t.includes('�')) t = new TextDecoder('windows-1252').decode(b);
+  if(enc==='utf-8' && t.includes('\uFFFD')) t = new TextDecoder('windows-1252').decode(b);
   return t.replace(/^﻿/, '');
 }
 function guessDelim(text){
