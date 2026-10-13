@@ -33,13 +33,23 @@ default.
 ## Using the window
 
 1. Copy `PstSplitter.ps1` and `PstSplitter.bat` to the same folder.
-2. Double-click `PstSplitter.bat`.
-3. Choose the PST file, the output folder and the split mode.
-4. Click **Preview** to see how many items and MB would go to each file without
-   writing anything. Then click **Split**.
+2. Double-click `PstSplitter.bat`. The PST Splitter window opens.
+3. **Files:** click Browse or drag a `.pst` onto the window. The output folder
+   is filled in for you (`<name>_split` next to the PST). Change it if you like.
+4. **Split by:** pick Size, Year, Month, Date range, Folder or Email address.
+   The options for that mode appear next to it. Tick **Limit each file to** to
+   cap the size of every file, whatever the mode.
+5. Click **Preview**. The Results tab lists every file that would be made, with
+   its item count and size. Nothing is written.
+6. Click **Split**. The progress bar shows how far it has got and which folder
+   it's working on. Click **Stop** to end early. Files written up to that point
+   are complete and can be opened.
+7. When it finishes, click **Open output folder**, or double-click a file in
+   Results to show it in Explorer. The Log tab lists any item that couldn't be
+   copied.
 
-Outlook opens in the background while it runs. The new files are not left
-attached to your Outlook profile. Use File > Open > Outlook Data File to view one.
+Outlook runs in the background while the split runs. The new files are not left
+attached to your Outlook profile. To view one, use File > Open > Outlook Data File.
 
 ## Command line
 
