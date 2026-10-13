@@ -27,13 +27,14 @@ default.
 
 ## Requirements
 
-- Windows with Microsoft Outlook 2010 or newer (32- or 64-bit)
-- Windows PowerShell 5.1 (built into Windows 10/11)
+- Windows 10 or 11 with Microsoft Outlook 2010 or newer (32- or 64-bit)
+- Nothing else to install. `PstSplitter.exe` uses .NET Framework 4.8, which is built into Windows.
 
-## Using the window
+## Using the program
 
-1. Copy `PstSplitter.ps1` and `PstSplitter.bat` to the same folder.
-2. Double-click `PstSplitter.bat`. The PST Splitter window opens.
+1. Copy `PstSplitter.exe` anywhere, such as the desktop, and double-click it.
+   The exe isn't code-signed, so the first time Windows may show "Windows
+   protected your PC". Click **More info**, then **Run anyway**.
 3. **Files:** click Browse or drag a `.pst` onto the window. The output folder
    is filled in for you (`<name>_split` next to the PST). Change it if you like.
 4. **Split by:** pick Size, Year, Month, Date range, Folder or Email address.
@@ -51,7 +52,23 @@ default.
 Outlook runs in the background while the split runs. The new files are not left
 attached to your Outlook profile. To view one, use File > Open > Outlook Data File.
 
+## Building the exe
+
+The source is in `app/`. On any PC with the .NET 8 SDK (Windows or Linux):
+
+```
+cd app
+dotnet build -c Release
+```
+
+The exe is written to `app/bin/Release/net48/PstSplitter.exe`. Copy it over
+`PstSplitter.exe` here when you change the code.
+
 ## Command line
+
+`PstSplitter.ps1` does the same splitting from PowerShell, for scripts or
+scheduled jobs. Double-clicking `PstSplitter.bat` opens the same window as
+the exe, run by PowerShell instead.
 
 ```powershell
 .\PstSplitter.ps1 -Source C:\Mail\archive.pst -Output C:\Mail\split -Mode Size -MaxSizeMB 2048
