@@ -35,17 +35,17 @@ default.
 1. Copy `PstSplitter.exe` anywhere, such as the desktop, and double-click it.
    The exe isn't code-signed, so the first time Windows may show "Windows
    protected your PC". Click **More info**, then **Run anyway**.
-3. **Files:** click Browse or drag a `.pst` onto the window. The output folder
+2. **Files:** click Browse or drag a `.pst` onto the window. The output folder
    is filled in for you (`<name>_split` next to the PST). Change it if you like.
-4. **Split by:** pick Size, Year, Month, Date range, Folder or Email address.
+3. **Split by:** pick Size, Year, Month, Date range, Folder or Email address.
    The options for that mode appear next to it. Tick **Limit each file to** to
    cap the size of every file, whatever the mode.
-5. Click **Preview**. The Results tab lists every file that would be made, with
+4. Click **Preview**. The Results tab lists every file that would be made, with
    its item count and size. Nothing is written.
-6. Click **Split**. The progress bar shows how far it has got and which folder
+5. Click **Split**. The progress bar shows how far it has got and which folder
    it's working on. Click **Stop** to end early. Files written up to that point
    are complete and can be opened.
-7. When it finishes, click **Open output folder**, or double-click a file in
+6. When it finishes, click **Open output folder**, or double-click a file in
    Results to show it in Explorer. The Log tab lists any item that couldn't be
    copied.
 
