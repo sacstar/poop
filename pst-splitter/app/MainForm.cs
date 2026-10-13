@@ -32,7 +32,9 @@ namespace PstSplitter
         };
 
         TextBox txtSource, txtOutput, txtEmail, txtLog;
-        Label lblSourceInfo, lblStatus;
+        Label lblSourceInfo, lblStatus, lblElapsed;
+        readonly System.Windows.Forms.Timer ticker = new System.Windows.Forms.Timer { Interval = 1000 };
+        readonly Stopwatch runClock = new Stopwatch();
         GroupBox gbFiles, gbSplit;
         DateTimePicker dtStart, dtEnd;
         CheckBox chkOtherDate, chkOtherSender, chkSize, chkSkip;
@@ -199,9 +201,16 @@ namespace PstSplitter
             bar.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblStatus = AddLabel(this, "Choose a PST file to start.", 12, 500);
             lblStatus.AutoSize = false;
-            lblStatus.Size = new Size(696, 20);
+            lblStatus.Size = new Size(566, 20);
             lblStatus.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             lblStatus.AutoEllipsis = true;
+            // A clock that ticks while a split runs, so it's clear the program hasn't frozen.
+            lblElapsed = AddLabel(this, "", 588, 500, true);
+            lblElapsed.AutoSize = false;
+            lblElapsed.Size = new Size(120, 20);
+            lblElapsed.TextAlign = ContentAlignment.TopRight;
+            lblElapsed.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            ticker.Tick += (s, e) => lblElapsed.Text = "Elapsed " + FormatTime(runClock.Elapsed);
 
             tabs = Add<TabControl>(this, 12, 526, 696, 202);
             tabs.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -361,8 +370,8 @@ namespace PstSplitter
             var clock = Stopwatch.StartNew();
             splitter.Progress = (done, total, folder) =>
             {
-                // Update the window at most ~10 times a second.
-                if (done != total && clock.ElapsedMilliseconds < 100) return;
+                // Update the window at most ~10 times a second while counting.
+                if (total > 0 && done != total && clock.ElapsedMilliseconds < 100) return;
                 clock.Restart();
                 BeginInvoke((Action)(() => ShowProgress(done, total, folder)));
             };
@@ -382,11 +391,22 @@ namespace PstSplitter
 
         void ShowProgress(int done, int total, string label)
         {
-            if (total <= 0) return;
-            bar.Maximum = total;
-            bar.Value = Math.Min(done, total);
+            if (total <= 0)
+            {
+                // Total not known yet: show a moving bar.
+                if (bar.Style != ProgressBarStyle.Marquee) { bar.Style = ProgressBarStyle.Marquee; bar.MarqueeAnimationSpeed = 30; }
+            }
+            else
+            {
+                if (bar.Style != ProgressBarStyle.Continuous) bar.Style = ProgressBarStyle.Continuous;
+                bar.Maximum = total;
+                bar.Value = Math.Min(done, total);
+            }
             lblStatus.Text = label;
         }
+
+        static string FormatTime(TimeSpan t) =>
+            t.TotalHours >= 1 ? string.Format("{0}:{1:00}:{2:00}", (int)t.TotalHours, t.Minutes, t.Seconds) : string.Format("{0}:{1:00}", t.Minutes, t.Seconds);
 
         void WriteLog(string msg)
         {
@@ -438,6 +458,19 @@ namespace PstSplitter
         void SetRunning(bool value)
         {
             running = value;
+            if (value)
+            {
+                runClock.Restart();
+                lblElapsed.Text = "Elapsed 0:00";
+                ticker.Start();
+            }
+            else
+            {
+                runClock.Stop();
+                ticker.Stop();
+                lblElapsed.Text = "Took " + FormatTime(runClock.Elapsed);
+                bar.Style = ProgressBarStyle.Continuous;
+            }
             gbFiles.Enabled = gbSplit.Enabled = btnPreview.Enabled = btnSplit.Enabled = !value;
             btnStop.Enabled = value;
             if (value) btnOpen.Enabled = false;

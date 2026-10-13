@@ -68,25 +68,64 @@ namespace PstSplitter
             var result = new SplitResult { Preview = preview, Output = outDir };
 
             Log("Reading " + source);
-            using (pst = new PstFile(source))
+            Progress(0, 0, "Opening the PST file...");
+            try
             {
+            using (pst = new PstFile(source, pages =>
+            {
+                CheckCancel();
+                Progress(pages, 0, string.Format("Reading the file's index: {0:N0} pages", pages));
+            }))
+            {
+                Progress(0, 0, "Reading folders...");
                 LoadFolders();
                 appointmentStartProp = FindNamedProperty(new Guid("00062002-0000-0000-C000-000000000046"), 0x820D);
 
+                // Folders' item lists
+                var scanFolders = folders.Values.Where(f => !f.IsSearch && f.Path != null).OrderBy(f => string.Join("\\", f.Path), StringComparer.OrdinalIgnoreCase).ToList();
+                var tables = new List<KeyValuePair<FolderInfo, TableContext>>();
+                var tableNids = new HashSet<ulong>();
+                int totalRows = 0;
+                for (int i = 0; i < scanFolders.Count; i++)
+                {
+                    CheckCancel();
+                    var f = scanFolders[i];
+                    Progress(i, scanFolders.Count, string.Format("Scanning folders: {0} ({1} of {2}), {3:N0} items so far",
+                        f.Path.Length == 0 ? "top" : f.Name, i + 1, scanFolders.Count, totalRows));
+                    ulong ctNid = Nid.Make(Nid.TypeContentsTable, Nid.Index(f.Nid));
+                    TableContext t;
+                    try { t = OpenTable(ctNid); }
+                    catch (PstFormatException ex)
+                    {
+                        Log(string.Format("  Skipping folder {0}, its item list is damaged: {1}", string.Join("\\", f.Path), ex.Message));
+                        continue;
+                    }
+                    if (t == null) continue;
+                    tableNids.Add(ctNid);
+                    tables.Add(new KeyValuePair<FolderInfo, TableContext>(f, t));
+                    totalRows += t.Rows.Count;
+                }
+                Log(string.Format("Scanned {0} folders: {1:N0} items", scanFolders.Count, totalRows));
+
                 // Messages, in folder order
                 var messages = new List<MessageInfo>();
-                var tableNids = new HashSet<ulong>();
-                foreach (var f in folders.Values.Where(f => !f.IsSearch && f.Path != null).OrderBy(f => string.Join("\\", f.Path), StringComparer.OrdinalIgnoreCase))
+                int measured = 0;
+                foreach (var kv in tables)
                 {
+                    var f = kv.Key;
+                    var ct = kv.Value;
                     ulong ctNid = Nid.Make(Nid.TypeContentsTable, Nid.Index(f.Nid));
-                    var ct = OpenTable(ctNid);
-                    if (ct == null) continue;
-                    tableNids.Add(ctNid);
                     // Each item also costs its share of the folder's contents table.
                     long rowCost = ct.Rows.Count == 0 ? 0 : (TreeBytes(pst.Nodes[ctNid].BidData) + TreeBytes(pst.Nodes[ctNid].BidSub)) / ct.Rows.Count + 1;
                     int flagsCol = ct.ColumnIndex(TagMessageFlags);
                     foreach (var row in ct.Rows)
                     {
+                        measured++;
+                        if (measured % 50 == 0 || measured == totalRows)
+                        {
+                            CheckCancel();
+                            Progress(measured, totalRows, string.Format("Measuring items: {0:N0} of {1:N0} ({2})", measured, totalRows, f.Name));
+                        }
                         ulong nid = TableContext.RowId(row);
                         if (Nid.Type(nid) != Nid.TypeNormalMessage || !pst.Nodes.TryGetValue(nid, out var node)) continue;
                         bool unread = false;
@@ -106,6 +145,8 @@ namespace PstSplitter
                         messages.Add(new MessageInfo { Nid = nid, Folder = f, Bytes = bytes, Unread = unread });
                     }
                 }
+                tables = null;
+                Progress(0, 0, "Measuring folders...");
                 skeletonBytes = 0x4800 + pst.Nodes.Values.Where(n => Nid.Type(n.Nid) != Nid.TypeNormalMessage && !tableNids.Contains(n.Nid))
                     .Sum(n => TreeBytes(n.BidData) + TreeBytes(n.BidSub) + 64);
                 SetFolderKeys(messages);
@@ -147,7 +188,7 @@ namespace PstSplitter
                         g.Messages.Add(m);
                         g.Bytes += m.Bytes;
                     }
-                    if (done % 25 == 0 || done == messages.Count) Progress(done, messages.Count, string.Format("Reading items: {0:N0} of {1:N0}", done, messages.Count));
+                    if (done % 25 == 0 || done == messages.Count) Progress(done, messages.Count, string.Format("Sorting items into files: {0:N0} of {1:N0}", done, messages.Count));
                 }
 
                 foreach (var g in order)
@@ -193,6 +234,11 @@ namespace PstSplitter
                     foreach (var g in order) { result.Files.Add(g.File); result.Copied += g.Messages.Count; }
                 }
             }
+            }
+            catch (OperationCanceledException)
+            {
+                result.Cancelled = true;
+            }
 
             Log("");
             if (result.Cancelled) Log("Stopped. The files written so far are complete and can be opened.");
@@ -201,6 +247,11 @@ namespace PstSplitter
                 Log(string.Format("{0}  {1:N0} items, {2:N1} MB", f.Name, f.Items, f.Bytes / 1048576.0));
             Log(string.Format("Done. {0:N0} items in {1} file(s), {2:N0} skipped, {3:N0} could not be read.", result.Copied, result.Files.Count, result.Skipped, result.Failed));
             return result;
+        }
+
+        void CheckCancel()
+        {
+            if (ShouldCancel()) throw new OperationCanceledException();
         }
 
         static void CheckFreeSpace(string dir, long needed)
@@ -419,6 +470,7 @@ namespace PstSplitter
 
         long WriteOutput(Group g, int fileNumber, int fileCount)
         {
+            Progress(0, 0, string.Format("Preparing {0}{1}...", g.File.Name, fileCount > 1 ? string.Format(" (file {0} of {1})", fileNumber, fileCount) : ""));
             var keepMessages = new HashSet<ulong>(g.Messages.Select(m => m.Nid));
             var unread = new HashSet<ulong>(g.Messages.Where(m => m.Unread).Select(m => m.Nid));
 

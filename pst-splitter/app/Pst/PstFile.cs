@@ -47,8 +47,13 @@ namespace PstSplitter.Pst
         public Dictionary<ulong, BlockEntry> Blocks { get; } = new Dictionary<ulong, BlockEntry>();
         public long FileLength => stream.Length;
 
-        public PstFile(string path)
+        readonly Action<int> onPagesRead;
+        int pagesRead;
+
+        /// <param name="onPagesRead">Called every 100 index pages while the B-trees load.</param>
+        public PstFile(string path, Action<int> onPagesRead = null)
         {
+            this.onPagesRead = onPagesRead;
             try
             {
                 // Don't let anything (e.g. Outlook) write to the file while we read it.
@@ -110,6 +115,7 @@ namespace PstSplitter.Pst
         void ReadBTree(ulong ib, byte pageType, bool nodes, int expectedLevel)
         {
             var page = ReadAt((long)ib, PageSize);
+            if (++pagesRead % 100 == 0) onPagesRead?.Invoke(pagesRead);
             if (page[496] != pageType || page[497] != pageType)
                 throw new PstFormatException("A B-tree page in the PST is damaged. Run the Inbox Repair Tool (scanpst.exe) on it first.");
             int cEnt = page[488], cbEnt = page[490], cLevel = page[491];

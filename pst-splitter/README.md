@@ -44,7 +44,9 @@ default.
    cap the size of every file, whatever the mode.
 4. Click **Preview**. The Results tab lists every file that would be made, with
    its item count and estimated size. Nothing is written.
-5. Click **Split**. The progress bar shows how far it has got. Click **Stop**
+5. Click **Split**. The status line shows each step (reading the index, scanning
+   folders, measuring items, writing each file) with a progress bar, and a clock
+   shows the elapsed time, so you can see it is working. Click **Stop**
    to end early; files finished before that are complete and can be opened.
 6. When it finishes, click **Open output folder**, or double-click a file in
    Results to show it in Explorer.
