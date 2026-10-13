@@ -272,7 +272,8 @@ namespace PstSplitter.Pst
                 amaps[i] = new byte[496];
                 Mark(amaps, IntervalStart(i), 512);
                 if (HasPMap(i)) Mark(amaps, IntervalStart(i) + 512, 512);
-                if (HasFMap(i)) Mark(amaps, IntervalStart(i) + 1024, 512);
+                // An FPMap interval reserves the page before the FPMap too, as Microsoft's outlook-pst does.
+                if (HasFMap(i) || HasFPMap(i)) Mark(amaps, IntervalStart(i) + 1024, 512);
                 if (HasFPMap(i)) Mark(amaps, IntervalStart(i) + 1536, 512);
             }
             foreach (var b in blocks.Values) Mark(amaps, b.Ib, BlockSpan(b.Cb));
