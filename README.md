@@ -17,3 +17,9 @@ the browser only and are never sent anywhere.
 
 Schedule CSV columns: `Last Name, First Name, Date, Start, End, Shift`
 (put mandatory overtime in the End time; Shift is Weekday, Weekend or Nights).
+
+# PST Splitter
+
+`pst-splitter/` holds a Windows tool that splits a large Outlook PST file into
+smaller ones by size, year, month, date range, folder or email address. See
+`pst-splitter/README.md`.
