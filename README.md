@@ -20,6 +20,6 @@ Schedule CSV columns: `Last Name, First Name, Date, Start, End, Shift`
 
 # PST Splitter
 
-`pst-splitter/` holds a Windows tool that splits a large Outlook PST file into
-smaller ones by size, year, month, date range, folder or email address. See
-`pst-splitter/README.md`.
+`pst-splitter/` holds a Windows program that splits a large Outlook PST file into
+smaller ones by size, year, month, date range, folder or email address. It
+doesn't need Outlook. See `pst-splitter/README.md`.

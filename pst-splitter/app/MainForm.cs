@@ -27,7 +27,7 @@ namespace PstSplitter
             new ModeInfo { Mode = SplitMode.Year, Text = "Year", Help = "One file per year, using the date each item was received or sent." },
             new ModeInfo { Mode = SplitMode.Month, Text = "Month", Help = "One file per month, using the date each item was received or sent." },
             new ModeInfo { Mode = SplitMode.Date, Text = "Date range", Help = "One file with the items between these dates (both days included)." },
-            new ModeInfo { Mode = SplitMode.Folder, Text = "Folder", Help = "One file per top-level folder: Inbox, Sent Items, Calendar, Contacts and so on. Subfolders go with their parent." },
+            new ModeInfo { Mode = SplitMode.Folder, Text = "Folder", Help = "One file per main folder: Inbox, Sent Items, Calendar and so on, with their subfolders. If everything is inside one folder, it splits on that folder's subfolders." },
             new ModeInfo { Mode = SplitMode.Sender, Text = "Email address", Help = "One file per email address. List the addresses to pull out, or leave the box empty for one file per sender." },
         };
 
@@ -343,7 +343,7 @@ namespace PstSplitter
                     return;
                 }
                 var msg = "Split " + Path.GetFileName(opts.Source) + " into " + opts.Output + "?\n\n" +
-                          "Outlook will open in the background while it works. Keep a backup of the original PST until you've checked the new files.";
+                          "The original PST is only read, never changed. If Outlook has it open, close Outlook first.";
                 if (MessageBox.Show(this, msg, "PST Splitter", MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK) return;
             }
 
@@ -364,10 +364,10 @@ namespace PstSplitter
                 // Update the window at most ~10 times a second.
                 if (done != total && clock.ElapsedMilliseconds < 100) return;
                 clock.Restart();
-                BeginInvoke((Action)(() => ShowProgress(preview, done, total, folder)));
+                BeginInvoke((Action)(() => ShowProgress(done, total, folder)));
             };
 
-            // Outlook's COM objects want a single-threaded apartment.
+            // Split off the UI thread so the window stays responsive.
             var worker = new Thread(() =>
             {
                 SplitResult result = null;
@@ -376,18 +376,16 @@ namespace PstSplitter
                 catch (Exception ex) { error = ex; }
                 BeginInvoke((Action)(() => Finish(result, error)));
             });
-            worker.SetApartmentState(ApartmentState.STA);
             worker.IsBackground = true;
             worker.Start();
         }
 
-        void ShowProgress(bool preview, int done, int total, string folder)
+        void ShowProgress(int done, int total, string label)
         {
             if (total <= 0) return;
             bar.Maximum = total;
             bar.Value = Math.Min(done, total);
-            lblStatus.Text = string.Format("{0} {1:N0} of {2:N0} items ({3:P0})  -  {4}",
-                preview ? "Checking" : "Copying", done, total, (double)done / total, folder);
+            lblStatus.Text = label;
         }
 
         void WriteLog(string msg)
